@@ -169,6 +169,36 @@ Scope: **list + create + activate + delete** — Save/Reset is present but disab
   Refused while moving. Rendered against the real hexapod (read-only) and screenshot-checked; create/activate not
   yet run on hardware. Defined CSs may not survive a controller power cycle unless saved (Save/Reset not implemented).
 
+**Hexapod 3D view, added 2026-10-02:** [3D 보기] in the hexapod connection row (after [좌표계]) opens the non-modal
+`F_Hexapod3D` (single instance, `_hexapod3DForm`), a look-alike of PIMikroMove's 3D hexapod view (user's
+screenshot). **Not provided by the GCS2 DLL** — built here with WPF 3D (`Viewport3D` in an `ElementHost`; references
+PresentationCore/PresentationFramework/WindowsBase/WindowsFormsIntegration/System.Xaml; no NuGet). Code in `View3D/`:
+- Model data comes from PI's own install, `C:\ProgramData\PI\PIHexapodDataFiles\` (the same files PIMikroMove uses):
+  `HexdataCollisionData\hexdata_<model>.dat` (h0, base joints `b[1..3,1..6]` at z=−h0, platform joints
+  `a0[1..3,1..6]` at z=0 — the "Base set"/"Platform set"; the file also has a second set `b[*,7..12]` that is not
+  used) and `3D\*\*_CAD.ini` section `[<model>]` (STL file names + offsets). Model name = `CST?` (`H-811.I2_AXIS_X` →
+  `H-811.I2`). This station: **C-887 (SN 126041474, FW 2.10.1.3) + H-811.I2** (`3D\M811\`). `H-811.I2.zip` (OBJ +
+  json) didn't extract with .NET ZipFile ("invalid data") and isn't needed.
+- Placement rules (derived from STL bounds + ini, screenshot-checked): plates are XY-centred on their bbox; baseplate
+  z = −h0 + raw z + offset Z (−8.5), platform z-centred + offset Z (+4.5). Strut STLs have **+Y along the strut**
+  (base→platform); lower part origin at `B + dir·LowerOffset.Z` (27) with local X offset (−3.8), upper part origin
+  at `A − dir·UpperOffset.Z` (29) — they overlap like a telescope. Strut roll (twist about its axis) is chosen so local
+  +X points radially outward — **not verified** against PIMikroMove.
+- Pose: `qPOS X..W` is in the active CS, so `F_Hexapod3D` converts with `KLT? <active> ZERO`:
+  `P_zero = K·P_active·K⁻¹` (row-vector `Matrix3D`: `K⁻¹·P·K`). Measured: active CS was **TILTEDCS (KSD) = ZERO
+  rotated U=180°** (that's why PIMikroMove's KSD axis labels look mirrored). Rotation order assumed fixed-axis U→V→W
+  (`Rotate X, Y, Z` appended). Correct at the home pose; not yet compared against PIMikroMove with a real tilt. The
+  triad (red X / green Y / blue Z) shows the active CS on the platform (`csFrame·platformPose`).
+- `MotionController`: `GetHexapodModelName`, `GetHexapodRawPose`, `GetHexapodActiveUserCoordSystem` (KEN? minus
+  `(PI)`), `GetHexapodTransformToZero` (KLT?) — polled (pose 100 ms, CS 1 s), so they return null without logging.
+- **Axis labels (added 2026-10-02, user request):** each arrow tip is projected to screen (`HexapodScene.Project`,
+  FieldOfView = horizontal) and a 2D `TextBlock` on a `Canvas` overlay is placed there — `X TILTEDCS` etc. on the
+  platform triad (`SetCoordSystemName` when the active CS changes) and `X (ZERO)` etc. on the floor axes. Deliberately
+  not 3D text, which reads mirrored from some angles (as PIMikroMove's `X KSD` does). Re-placed on pose update, camera
+  move and resize.
+- Mouse: drag = orbit, wheel = zoom, double-click = reset view. Rendered against the real hexapod (read-only) and with a
+  synthetic tilt; screenshots looked right.
+
 **Hexapod reference (FRF), added 2026-10-01:** after the hexapod controller is power-cycled, every move fails with
 GCS error 5 "Unallowable move attempted on unreferenced axis, or move attempted with servo off" (seen on hardware).
 `MotionController.IsHexapodReferenced` (`qFRF` on all 6 axes `X Y Z U V W` — FRF is whole-platform) and

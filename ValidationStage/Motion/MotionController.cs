@@ -366,6 +366,121 @@ namespace MotorizedStage_SK_PI
 
         #endregion
 
+        #region 헥사포드 3D 보기용 조회 (주기적으로 불리므로 실패해도 로그를 남기지 않고 null)
+
+        /// <summary>헥사포드 모델 이름 (CST? "X=H-811.I2_AXIS_X" → "H-811.I2"). 실패하면 null.</summary>
+        public string GetHexapodModelName()
+        {
+            if (!Hexapod.IsConnected)
+            {
+                return null;
+            }
+            int id = GetHexapodDeviceId();
+            var buffer = new System.Text.StringBuilder(1024);
+            if (PI.PI_GCS2.qCST(id, "X", buffer, buffer.Capacity) == 0)
+            {
+                PI.PI_GCS2.GetError(id);
+                return null;
+            }
+            string value = buffer.ToString().Split('=').Last().Trim();
+            int axisTag = value.IndexOf("_AXIS", System.StringComparison.OrdinalIgnoreCase);
+            return axisTag > 0 ? value.Substring(0, axisTag) : value;
+        }
+
+        /// <summary>6축 위치 (X,Y,Z mm / U,V,W deg), 활성 좌표계 기준 컨트롤러 값 그대로. 실패하면 null.</summary>
+        public double[] GetHexapodRawPose()
+        {
+            if (!Hexapod.IsConnected)
+            {
+                return null;
+            }
+            int id = GetHexapodDeviceId();
+            var values = new double[6];
+            if (PI.PI_GCS2.qPOS(id, AllHexapodAxes, values) == 0)
+            {
+                PI.PI_GCS2.GetError(id);
+                return null;
+            }
+            return values;
+        }
+
+        /// <summary>
+        /// 활성 사용자 좌표계 이름 (KEN? 에서 PI 내부 "(PI)" 를 뺀 것). 없으면 "ZERO", 실패하면 null.
+        /// 실제 장비(2026-10-02): "TILTEDCS=KSD", "PI_LEVELLING=KLD(PI)", "PI_BASE=KSB(PI)".
+        /// </summary>
+        public string GetHexapodActiveUserCoordSystem()
+        {
+            if (!Hexapod.IsConnected)
+            {
+                return null;
+            }
+            int id = GetHexapodDeviceId();
+            var buffer = new System.Text.StringBuilder(4096);
+            if (PI.PI_GCS2.qKEN(id, "", buffer, buffer.Capacity) == 0)
+            {
+                PI.PI_GCS2.GetError(id);
+                return null;
+            }
+            foreach (string line in buffer.ToString().Split(new[] { '\n', '\r' }, System.StringSplitOptions.RemoveEmptyEntries))
+            {
+                string[] parts = line.Split('=');
+                if (parts.Length == 2 && !parts[1].Trim().EndsWith("(PI)"))
+                {
+                    return parts[0].Trim();
+                }
+            }
+            return "ZERO";
+        }
+
+        /// <summary>
+        /// 좌표계 cs → ZERO 변환 목록 (KLT? cs ZERO). 줄마다 X,Y,Z mm / U,V,W deg. 실패하면 null.
+        /// 실제 장비(2026-10-02): "Name=TILTEDCS EndCoordinateSystem=ZERO X=0 Y=0 Z=0 U=180 V=0 W=0" (X축 180° 뒤집힘).
+        /// </summary>
+        public System.Collections.Generic.List<double[]> GetHexapodTransformToZero(string cs)
+        {
+            var result = new System.Collections.Generic.List<double[]>();
+            if (!Hexapod.IsConnected)
+            {
+                return null;
+            }
+            if (cs == "ZERO")
+            {
+                return result;
+            }
+            int id = GetHexapodDeviceId();
+            var buffer = new System.Text.StringBuilder(4096);
+            if (PI.PI_GCS2.qKLT(id, cs, "ZERO", buffer, buffer.Capacity) == 0)
+            {
+                PI.PI_GCS2.GetError(id);
+                return null;
+            }
+            foreach (string line in buffer.ToString().Split(new[] { '\n', '\r' }, System.StringSplitOptions.RemoveEmptyEntries))
+            {
+                var fields = line.Split(new[] { '\t', ' ' }, System.StringSplitOptions.RemoveEmptyEntries)
+                    .Select(f => f.Split('='))
+                    .Where(kv => kv.Length == 2)
+                    .ToDictionary(kv => kv[0], kv => kv[1]);
+                if (fields.TryGetValue("Name", out string name) && name == "ZERO")
+                {
+                    continue;   // ZERO → ZERO 는 항등
+                }
+                var values = new double[6];
+                bool ok = true;
+                for (int i = 0; i < 6; i++)
+                {
+                    ok &= fields.TryGetValue(PiAxisNames[i], out string raw)
+                        && double.TryParse(raw, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out values[i]);
+                }
+                if (ok)
+                {
+                    result.Add(values);
+                }
+            }
+            return result;
+        }
+
+        #endregion
+
         #region 헥사포드 레퍼런스 (FRF)
 
         // 헥사포드 컨트롤러는 전원을 켤 때마다 레퍼런스가 풀린다. 그 상태에서 MOV 를 보내면

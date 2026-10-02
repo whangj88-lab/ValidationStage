@@ -25,6 +25,7 @@ namespace ValidationStage
         private bool _probeReading;
         private bool _probeReadInFlight;
         private readonly HashSet<string> _singleReadsInFlight = new HashSet<string>();
+        private F_Hexapod3D _hexapod3DForm;
 
         private readonly Dictionary<Axis, Label> _posLabels = new Dictionary<Axis, Label>();
         private readonly Dictionary<Axis, Label> _statusLabels = new Dictionary<Axis, Label>();
@@ -251,6 +252,25 @@ namespace ValidationStage
             using (var form = new F_CoordSystem(_motion, AppendLog))
             {
                 form.ShowDialog(this);
+            }
+        }
+
+        /// <summary>[3D 보기]: 헥사포드 3D 창을 띄운다 (비모달 - 띄운 채로 조그하면 자세가 따라 움직인다). 이미 열려 있으면 앞으로.</summary>
+        private void Hexapod3DButton_Click(object sender, EventArgs e)
+        {
+            if (!_motion.Hexapod.IsConnected)
+            {
+                AppendLog("[Hexapod] 먼저 [연결]하세요");
+                return;
+            }
+            if (_hexapod3DForm == null || _hexapod3DForm.IsDisposed)
+            {
+                _hexapod3DForm = new F_Hexapod3D(_motion);
+                _hexapod3DForm.Show(this);
+            }
+            else
+            {
+                _hexapod3DForm.Activate();
             }
         }
 
