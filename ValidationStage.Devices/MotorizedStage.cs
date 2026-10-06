@@ -596,8 +596,19 @@ namespace ValidationStage.Devices
             }
         }
 
+        /// <summary>
+        /// "IPS" 응답이 다 왔는지 판단한다 (STATUS 비트 16개가 모두 들어와야 끝).
+        /// 실측(2026-10-06): IPS 응답은 "*IN000000" 과 나머지 "*#1POS..*#1STATUS.." 가 10ms 이상 떨어져 따로 오는 경우가 많다.
+        /// </summary>
+        private static readonly Regex IpsReplyComplete = new Regex(@"STATUS[01]{4}(_?[01]{4}){3}", RegexOptions.IgnoreCase);
+
         /// <summary>요청 하나를 보내고 응답 하나를 받는다. 모든 통신은 이 함수로만 한다 (반이중, 요청-응답).</summary>
-        private string Query(string command)
+        /// <param name="command">보낼 명령 (끝의 CR 은 여기서 붙인다)</param>
+        /// <param name="replyComplete">
+        /// 응답이 끝났는지 내용으로 판단할 때 쓴다. 이 식이 맞을 때까지 계속 읽는다.
+        /// null 이면 ReplyQuietMs 동안 추가 데이터가 없을 때 끝으로 본다.
+        /// </param>
+        private string Query(string command, Regex replyComplete = null)
         {
             lock (_commLock)
             {
@@ -623,7 +634,7 @@ namespace ValidationStage.Devices
                 byte[] data = Encoding.ASCII.GetBytes(command + "\r");
                 stream.Write(data, 0, data.Length);
 
-                string reply = ReadReply(stream, buffer);
+                string reply = ReadReply(stream, buffer, replyComplete);
                 _lastReplyTime = DateTime.UtcNow;
                 return reply;
             }
@@ -631,23 +642,33 @@ namespace ValidationStage.Devices
 
         /// <summary>
         /// 첫 바이트는 ReadTimeout 까지 기다리고(무응답이면 IOException), 이후 ReplyQuietMs 동안 추가 데이터가 없으면 응답 끝으로 본다.
+        /// replyComplete 가 있으면 그 식이 맞을 때까지 읽는다 (조각마다 ReadTimeout 까지 기다리고, 안 오면 IOException).
         /// </summary>
-        private static string ReadReply(NetworkStream stream, byte[] buffer)
+        private static string ReadReply(NetworkStream stream, byte[] buffer, Regex replyComplete)
         {
             var sb = new StringBuilder();
-            int n = stream.Read(buffer, 0, buffer.Length);
-            if (n == 0)
+            do
             {
-                throw new IOException(T("컨트롤러가 연결을 끊었습니다", "Connection closed by controller"));
+                int read = stream.Read(buffer, 0, buffer.Length);
+                if (read == 0)
+                {
+                    throw new IOException(T("컨트롤러가 연결을 끊었습니다", "Connection closed by controller"));
+                }
+                sb.Append(Encoding.ASCII.GetString(buffer, 0, read));
             }
-            sb.Append(Encoding.ASCII.GetString(buffer, 0, n));
+            while (replyComplete != null && !replyComplete.IsMatch(sb.ToString()));
+
+            if (replyComplete != null)
+            {
+                return sb.ToString().Trim('\r', '\n', '\0', ' ');
+            }
 
             Stopwatch quiet = Stopwatch.StartNew();
             while (quiet.ElapsedMilliseconds < ReplyQuietMs)
             {
                 if (stream.DataAvailable)
                 {
-                    n = stream.Read(buffer, 0, buffer.Length);
+                    int n = stream.Read(buffer, 0, buffer.Length);
                     sb.Append(Encoding.ASCII.GetString(buffer, 0, n));
                     quiet.Restart();
                 }
@@ -753,7 +774,7 @@ namespace ValidationStage.Devices
         {
             foreach (Axis axis in Axes)
             {
-                string reply = Query($"{AxisNo(axis)}ips");
+                string reply = Query($"{AxisNo(axis)}ips", IpsReplyComplete);
                 Match pos = Regex.Match(reply, @"POS(-?\d+)", RegexOptions.IgnoreCase);
                 Match stat = Regex.Match(reply, @"STATUS([01_]+)", RegexOptions.IgnoreCase);
                 if (!pos.Success || !stat.Success)

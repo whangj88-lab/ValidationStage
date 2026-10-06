@@ -106,7 +106,9 @@ the old stage comes back — it would need porting to the DLL's style).
 - **Protocol** (manual `17.Calibration System/Doc/[단축 Stage조합] MMT 4axis driver controller manual_Kor
   (2023.07.04).pdf`; Korean text doesn't extract with pdftotext — render pages, e.g. `Windows.Data.Pdf`): request
   `"[axis]cmd[data]\r"`, reply `"*..."`. **Replies have no consistent terminator** (measured: only `#` ends in CR), so
-  `ReadReply` ends a reply after a 10 ms quiet gap. ≥2 ms between reply and next request. Key commands: `ma0/ma1`
+  `ReadReply` ends a reply after a 10 ms quiet gap — except `ips`, whose reply arrives split (`*IN000000`, then
+  `*#nPOS..*#nSTATUS..` >10 ms later; measured 2026-10-06: only ~10% of polls parsed, so stage position/status
+  updated very slowly), so `Query(cmd, IpsReplyComplete)` reads until all 16 STATUS bits are in. ≥2 ms between reply and next request. Key commands: `ma0/ma1`
   relative/absolute, `d`/`g` move, `j+`/`j-`/`s` jog/stop, `@s` all-stop, `ips` (IN+POS+STATUS in one reply,
   e.g. `*IN000000*#1POS0*#1STATUS0001_0100_0000_0011_1101`, rightmost char = bit0: bit1 driver err, bit3 0=moving,
   bit9 overheat, bit12 CW limit, bit13 CCW limit), `st0` motor power on (**controller powers up with ST1 = off**, so
