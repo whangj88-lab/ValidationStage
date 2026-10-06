@@ -15,13 +15,16 @@ using System.Runtime.InteropServices;
 using System.Text;
 
 
-namespace PI
+// Malformed XML doc comments in the original PI file (internal class, ignored)
+#pragma warning disable 1570
+
+namespace ValidationStage.Devices
 {
 
     /// <summary>
     /// Summary description for PI_G.
     /// </summary>
-    public class PI_GCS2
+    internal class PI_GCS2
     {
 
         ////////////////////////////////

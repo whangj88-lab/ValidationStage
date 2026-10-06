@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'">
+    <RemoteDebugEnabled>false</RemoteDebugEnabled>
+    <RemoteDebugMachine>
+    </RemoteDebugMachine>
+    <AuthenticationMode>None</AuthenticationMode>
+    <StartWorkingDirectory>
+    </StartWorkingDirectory>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Remote|x64'">
+    <StartWorkingDirectory>C:\Users\User\Documents\Project\19.Validation Stage\Code\ValidationStage\bin\x64\Remote\</StartWorkingDirectory>
+    <RemoteDebugEnabled>true</RemoteDebugEnabled>
+    <RemoteDebugMachine>192.168.40.44:4026</RemoteDebugMachine>
+    <AuthenticationMode>Windows</AuthenticationMode>
+  </PropertyGroup>
+</Project>

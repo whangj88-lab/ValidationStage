@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -7,28 +8,36 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using static ValidationStage.Devices.Messages;
 
-namespace MotorizedStage_SK_PI
+namespace ValidationStage.Devices
 {
     /// <summary>
-    /// MMT MMDC-ST466 4축 스테핑 드라이버/컨트롤러 - 선형 스테이지 X, Y, Z (Ethernet TCP, ASCII 프로토콜).
-    /// 2026-09-30 스테이지 제조사 변경으로 SK_Motion 을 대체한다. MotionController/F_Main 변경을 줄이려고
-    /// 공개 API 모양(이벤트, MoveAsync/JogRun/JogStop, µm 단위 등)은 SK_Motion 과 맞춘다.
-    ///
+    /// Motorized Stage X, Y, Z - MMT MMDC-ST466 4축 스테핑 컨트롤러 (Ethernet TCP, ASCII 프로토콜).
+    /// 스테이지: X, Y = AM1-0602-3DY (리드 1 mm), Z = AZ-0803-3DY (쐐기형, 경사 20°). 단위: µm.
+    /// 상태(위치/이동 중/리밋/알람)는 연결 후 내부에서 100 ms 마다 갱신되며 <see cref="GetAxisStatuses"/> 로 조회한다.
+    /// 실패한 명령은 false/null 을 돌려주고 원인은 <see cref="LastError"/>, 경과는 <see cref="GetLogs"/> 로 확인한다.
+    /// 위치 카운터는 컨트롤러 전원 투입 시 0 부터 시작하므로, 전원을 켠 뒤에는 <see cref="HomeAsync"/> 로 기계 원점을 찾는다.
+    /// </summary>
+    /// <remarks>
     /// 프로토콜 (MMT "4axis driver controller manual" 7~9장 + 실측):
     /// - 요청: "[축번호]명령[데이터]\r" (대소문자 무관). 응답: "*..." (예: "*#1POS0", "*ok", "*okAtten")
     /// - 응답 끝에 종료문자가 일정하지 않다 (실측: "#" 응답만 CR 로 끝남). 그래서 짧은 무신호 구간으로 응답을 끊는다.
     /// - 응답 후 다음 요청까지 최소 2ms (매뉴얼 7.1).
     /// - 위치/거리/속도는 µstep 단위, 51200 µstep/rev.
     /// - 컨트롤러 전원 투입 시 모터 전원(ST)은 기본 1(차단)이므로 연결 시 "st0" 을 보낸다.
-    /// - 위치 카운터는 컨트롤러 전원 투입 시 0 부터 시작한다 (절대 원점 아님).
-    /// </summary>
-    public class MMT_Motion
+    /// </remarks>
+    public class MotorizedStage
     {
+        /// <summary>스테이지가 담당하는 축 (X, Y, Z). 컨트롤러 축 번호 = 인덱스 + 1.</summary>
+        public static readonly Axis[] Axes = { Axis.X, Axis.Y, Axis.Z };
+
+        /// <summary>호스트에 포트를 생략했을 때 쓰는 컨트롤러 TCP 포트.</summary>
         public const int DefaultPort = 5001;
+
         private const int MicrostepsPerRev = 51200;
 
-        // 1 µstep 당 이동량 (µm). 인덱스 = (int)Axis (X=0, Y=1, Z=2), 컨트롤러 축 번호 = 인덱스 + 1.
+        // 1 µstep 당 이동량 (µm). 인덱스 = (int)Axis (X=0, Y=1, Z=2).
         // X, Y: AM1-0602-3DY - 볼나사 리드 1mm (카탈로그 표준 리드) -> 1000µm / 51200.
         // Z   : AZ-0803-3DY  - 쐐기형 Z. 1회전 상승량 = 리드 1mm x tan(경사각).
         //       경사각은 카탈로그/모델명 규칙에 없어 AZ-0808 과 같은 20도로 잡았고, 2026-09-30 프로브 실측으로 맞는 것을 확인했다.
@@ -41,9 +50,8 @@ namespace MotorizedStage_SK_PI
         };
 
         /// <summary>
-        /// 속도 단계(0:저속, 1:중속, 2:고속)별 속도 (µsteps/s). 인덱스 = (int)Axis.
-        /// 보수적으로 카탈로그 최대속도(X,Y 20mm/s, Z 3.6mm/s)의 25~50% 이하로 잡았다.
-        /// 세 축 모두 모터 회전 속도 0.5 / 2 / 5 rev/s 로 같다 (2026-09-30 사용자 선택).
+        /// 속도 단계(저속/중속/고속)별 속도 (µsteps/s). [축 인덱스][단계].
+        /// 세 축 모두 모터 회전 속도 0.5 / 2 / 5 rev/s 로 같다.
         /// X, Y: 0.5 / 2 / 5 mm/s.  Z: 쐐기(경사 20도)라 약 0.18 / 0.73 / 1.8 mm/s.
         /// </summary>
         public readonly int[][] SpeedLevelValues =
@@ -64,14 +72,19 @@ namespace MotorizedStage_SK_PI
         private readonly object _statusLock = new object();
         private DateTime _lastReplyTime = DateTime.MinValue;
 
-        private Axis[] _axes = new Axis[0];
         private AxisStatus[] _statuses = new AxisStatus[0];
         private CancellationTokenSource _pollCts;
 
-        public event EventHandler<string> Logged;
-        public event EventHandler<bool> OnConnectionChange;
-        public event EventHandler<AxisStatus[]> OnStatusChanged;
+        private readonly LogBuffer _log = new LogBuffer("Stage");
+        private readonly DeviceErrors _errors;
 
+        /// <summary>스테이지 객체를 만든다. 연결은 <see cref="Connect"/>.</summary>
+        public MotorizedStage()
+        {
+            _errors = new DeviceErrors(_log);
+        }
+
+        /// <summary>연결 여부. 통신이 끊기면 false 가 된다.</summary>
         public bool IsConnected
         {
             get
@@ -81,26 +94,41 @@ namespace MotorizedStage_SK_PI
             }
         }
 
+        /// <summary>마지막으로 실패한 명령의 원인 (없으면 null). 성공해도 지워지지 않는다.</summary>
+        public DeviceError LastError => _errors.Last;
+
+        /// <summary>마지막 조회 이후 쌓인 로그를 꺼낸다 (꺼낸 로그는 버퍼에서 지워진다).</summary>
+        public List<LogEntry> GetLogs()
+        {
+            return _log.Drain();
+        }
+
+        #region 연결
+
+        /// <summary>
+        /// 컨트롤러에 연결하고 X, Y, Z 모터 전원을 켠다(st0). 응답 없는 주소면 2초 동안 블록되므로 UI 스레드 밖에서 호출한다.
+        /// 연결 후에는 컨트롤러에 남아 있던 속도 그대로이므로, 필요하면 <see cref="SetSpeedLevel"/> 로 속도를 맞춘다.
+        /// </summary>
         /// <param name="host">"192.168.0.123" 또는 "192.168.0.123:5001"</param>
-        public bool Connect(Axis[] axes, string host)
+        public bool Connect(string host)
         {
             if (IsConnected)
             {
-                Logged?.Invoke(this, "Already connected");
+                _errors.Fail(T("이미 연결되어 있습니다", "Already connected"));
                 return false;
             }
 
             try
             {
                 ParseHost(host, out string ip, out int port);
-                Logged?.Invoke(this, $"-- Try to Connect -- {ip}:{port}");
+                _log.Add(T($"연결 시도 - {ip}:{port}", $"Connecting - {ip}:{port}"));
 
                 var client = new TcpClient();
                 IAsyncResult ar = client.BeginConnect(ip, port, null, null);
                 if (!ar.AsyncWaitHandle.WaitOne(ConnectTimeoutMs))
                 {
                     client.Close();
-                    throw new Exception($"Connection timeout ({ip}:{port})");
+                    throw new DeviceException(T($"연결 시간 초과 ({ip}:{port})", $"Connection timeout ({ip}:{port})"));
                 }
                 client.EndConnect(ar);
                 client.NoDelay = true;
@@ -117,17 +145,16 @@ namespace MotorizedStage_SK_PI
                 string reply = Query("#");
                 if (!reply.StartsWith("*"))
                 {
-                    throw new Exception("Not an MMT controller reply: " + reply);
+                    throw new DeviceException(T("MMT 컨트롤러 응답이 아닙니다: ", "Not an MMT controller reply: ") + reply);
                 }
 
-                _axes = axes.ToArray();
                 lock (_statusLock)
                 {
-                    _statuses = _axes.Select(axis => new AxisStatus(axis)).ToArray();
+                    _statuses = Axes.Select(axis => new AxisStatus(axis)).ToArray();
                 }
 
                 // 모터 전원 투입 (컨트롤러 전원 투입 시 기본값이 ST1 = 차단)
-                foreach (Axis axis in _axes)
+                foreach (Axis axis in Axes)
                 {
                     ExpectOk(Query($"{AxisNo(axis)}st0"));
                 }
@@ -137,13 +164,12 @@ namespace MotorizedStage_SK_PI
                 CancellationToken token = _pollCts.Token;
                 Task.Run(() => PollingStatus(token));
 
-                OnConnectionChange?.Invoke(this, true);
-                Logged?.Invoke(this, ": Successfully connected.");
+                _log.Add(T("연결됨", "Connected"));
                 return true;
             }
             catch (Exception ex)
             {
-                Logged?.Invoke(this, $"Error : Connect \n\t{ex.Message}");
+                _errors.Fail(T($"연결 오류: {ex.Message}", $"Connect error: {ex.Message}"));
                 lock (_commLock)
                 {
                     CloseClient();
@@ -152,9 +178,7 @@ namespace MotorizedStage_SK_PI
             }
         }
 
-        /// <summary>
-        /// 통신만 끊는다. 모터 전원(ST)은 그대로 두어 유지 토크로 위치를 잡고 있게 한다.
-        /// </summary>
+        /// <summary>통신만 끊는다. 모터 전원(ST)은 그대로 두어 유지 토크로 위치를 잡고 있게 한다.</summary>
         public void Disconnect()
         {
             if (_client == null)
@@ -166,11 +190,17 @@ namespace MotorizedStage_SK_PI
             {
                 CloseClient();
             }
-            OnConnectionChange?.Invoke(this, false);
-            Logged?.Invoke(this, ": Disconnected");
+            _log.Add(T("연결 해제", "Disconnected"));
         }
 
-        /// <param name="positions">X,Y,Z: µm</param>
+        #endregion
+
+        #region 이동
+
+        /// <summary>이동하고 끝날 때까지 기다린다. positions 단위 µm.</summary>
+        /// <param name="axes">X, Y, Z 중 이동할 축</param>
+        /// <param name="positions">axes 순서대로의 목표 (µm)</param>
+        /// <param name="isAbsolute">true = 절대 위치(컨트롤러 좌표), false = 현재 위치 기준 상대 이동</param>
         public async Task<bool> MoveAsync(Axis[] axes, double[] positions, bool isAbsolute)
         {
             try
@@ -178,7 +208,7 @@ namespace MotorizedStage_SK_PI
                 CheckReady(axes);
                 if (axes.Length != positions.Length)
                 {
-                    throw new Exception("Move Command: The length of 'axes' must match the length of 'positions'.");
+                    throw new DeviceException(T("이동 명령: 축 개수와 위치 개수가 다릅니다", "Move: number of axes and positions differ"));
                 }
 
                 // MA: 0 상대 / 1 절대 이동 (매뉴얼 9.1.14). 모든 축 설정 후 한꺼번에 G.
@@ -198,12 +228,12 @@ namespace MotorizedStage_SK_PI
             }
             catch (Exception ex)
             {
-                Logged?.Invoke(this, ex.Message);
+                _errors.Fail(ex);
                 return false;
             }
         }
 
-        /// <summary>누르고 있는 동안 등속 이동 (J+/J-). JogStop 으로 멈춘다.</summary>
+        /// <summary>누르고 있는 동안 등속 이동을 시작한다 (J+/J-). <see cref="JogStop"/> 으로 멈춘다. dir = true 가 + 방향.</summary>
         public bool JogRun(Axis axis, bool dir)
         {
             try
@@ -214,49 +244,43 @@ namespace MotorizedStage_SK_PI
             }
             catch (Exception ex)
             {
-                Logged?.Invoke(this, ex.Message);
+                _errors.Fail(ex);
                 return false;
             }
         }
 
+        /// <summary>조그를 멈춘다 ("S", 감속 정지). 정지 후 남는 Busy 상태는 백그라운드에서 정리한다.</summary>
         public bool JogStop(Axis axis)
         {
             try
             {
-                if (!IsConnected)
-                {
-                    throw new Exception("Not connected");
-                }
+                CheckConnected();
                 ExpectOk(Query($"{AxisNo(axis)}s"));
-                // 감속 정지를 기다려야 하므로 UI 스레드를 막지 않게 백그라운드에서 busy 를 해제한다.
+                // 감속 정지를 기다려야 하므로 호출한 스레드를 막지 않게 백그라운드에서 busy 를 해제한다.
                 Task.Run(() => ClearBusyAfterStopSafe(axis));
                 return true;
             }
             catch (Exception ex)
             {
-                Logged?.Invoke(this, ex.Message);
+                _errors.Fail(ex);
                 return false;
             }
         }
 
         /// <summary>
-        /// 지정한 축만 감속 정지 ("S"). 이동/원점찾기 중이어도 보낼 수 있다.
-        /// 정지 후 Busy 가 남는 컨트롤러 특성 때문에 JogStop 과 같이 busy 를 정리한다.
-        /// (MMT 는 정지 명령이 "S" 하나뿐이라 비상정지와 일반 정지가 같은 명령이다.)
+        /// 지정한 축만 감속 정지 ("S"). 이동/원점 찾기 중이어도 보낼 수 있다.
+        /// (MMT 는 정지 명령이 "S" 하나뿐이라 비상 정지와 일반 정지가 같은 명령이다.)
         /// </summary>
         public async Task<bool> StopAsync(Axis[] axes)
         {
             try
             {
-                if (!IsConnected)
-                {
-                    throw new Exception("Not connected");
-                }
+                CheckConnected();
                 foreach (Axis axis in axes)
                 {
                     ExpectOk(Query($"{AxisNo(axis)}s"));
                 }
-                Logged?.Invoke(this, "Stop " + string.Join(",", axes));
+                _log.Add(T("정지 ", "Stop ") + string.Join(",", axes));
                 await Task.Run(() =>
                 {
                     foreach (Axis axis in axes)
@@ -268,42 +292,43 @@ namespace MotorizedStage_SK_PI
             }
             catch (Exception ex)
             {
-                Logged?.Invoke(this, ex.Message);
+                _errors.Fail(ex);
                 return false;
             }
         }
 
-        /// <summary>모든 축 정지 ("@s" - 매뉴얼 9.1.2 모든 축에 명령).</summary>
+        /// <summary>모든 축 정지 ("@s").</summary>
         public async Task<bool> StopEmergencyAsync()
         {
             try
             {
-                if (!IsConnected)
-                {
-                    throw new Exception("Not connected");
-                }
+                CheckConnected();
                 ExpectOk(Query("@s"));
-                Logged?.Invoke(this, "StopEmergency");
+                _log.Add(T("비상 정지", "Emergency stop"));
                 await Task.Run(() =>
                 {
-                    foreach (Axis axis in _axes)
+                    foreach (Axis axis in Axes)
                     {
                         ClearBusyAfterStopSafe(axis);
                     }
                 });
-                await WaitForStopAsync(_axes);
+                await WaitForStopAsync(Axes);
                 return true;
             }
             catch (Exception ex)
             {
-                Logged?.Invoke(this, ex.Message);
+                _errors.Fail(ex);
                 return false;
             }
         }
 
+        #endregion
+
+        #region 원점 / 설정
+
         /// <summary>
-        /// 기계 원점 찾기 ("HM0" - (-)리밋 방향으로 홈 서칭, 매뉴얼 9.4.3). 모든 축을 동시에 시작하고 끝날 때까지 기다린다.
-        /// 홈 서칭 속도(HMV 등)는 컨트롤러 저장값이 10mm/s 로 빨라서, 시작 전에 중속 수준으로 맞춘다 (다를 때만 쓴다).
+        /// 기계 원점 찾기 ("HM0" - (−)리밋 방향으로 홈 서칭). 모든 축을 동시에 시작하고 끝날 때까지 기다린다.
+        /// 축이 실제로 움직이므로 주변 간섭을 확인한 뒤 호출한다. 홈 서칭 속도는 중속 수준으로 맞춘 뒤 시작한다.
         /// </summary>
         public async Task<bool> HomeAsync(Axis[] axes)
         {
@@ -313,7 +338,7 @@ namespace MotorizedStage_SK_PI
                 foreach (Axis axis in axes)
                 {
                     int axisNo = AxisNo(axis);
-                    int speed = SpeedLevelValues[(int)axis][1];
+                    int speed = SpeedLevelValues[(int)axis][(int)SpeedLevel.Medium];
                     WriteIfDifferent(axisNo, "hmv", speed);
                     // 매뉴얼: HMA/HMAD 는 HMV ~ HMV x10 범위, HMVF 는 특별한 경우가 아니면 HMV 의 1/10
                     WriteIfDifferent(axisNo, "hma", speed * 10);
@@ -324,20 +349,20 @@ namespace MotorizedStage_SK_PI
                 {
                     ExpectOk(Query($"{AxisNo(axis)}hm0"));
                 }
-                Logged?.Invoke(this, "Homing...");
+                _log.Add(T("원점 찾는 중...", "Homing..."));
 
                 await WaitForStopAsync(axes);
-                Logged?.Invoke(this, "Homing done");
+                _log.Add(T("원점 찾기 완료", "Homing done"));
                 return true;
             }
             catch (Exception ex)
             {
-                Logged?.Invoke(this, ex.Message);
+                _errors.Fail(ex);
                 return false;
             }
         }
 
-        /// <summary>현재 위치를 컨트롤러의 0 위치로 설정 ("p0", 매뉴얼 9.3.3).</summary>
+        /// <summary>현재 위치를 컨트롤러의 0 위치로 설정한다 ("p0").</summary>
         public bool SetZero(Axis[] axes)
         {
             try
@@ -352,14 +377,14 @@ namespace MotorizedStage_SK_PI
             }
             catch (Exception ex)
             {
-                Logged?.Invoke(this, ex.Message);
+                _errors.Fail(ex);
                 return false;
             }
         }
 
         /// <summary>
-        /// 속도/가속도/감속도 설정 (µsteps/s, µsteps/s²).
-        /// V/A/AD 는 컨트롤러 비휘발성 메모리에 저장되는 값이라, 쓰기 횟수를 줄이려고 현재 값과 다를 때만 쓴다.
+        /// 속도/가속도/감속도를 설정한다 (µsteps/s, µsteps/s²).
+        /// 컨트롤러 비휘발성 메모리에 저장되는 값이라, 쓰기 횟수를 줄이려고 현재 값과 다를 때만 쓴다.
         /// </summary>
         public bool SetSpeed(Axis axis, int velocity, int accel, int decel)
         {
@@ -383,17 +408,46 @@ namespace MotorizedStage_SK_PI
             }
             catch (Exception ex)
             {
-                Logged?.Invoke(this, ex.Message);
+                _errors.Fail(ex);
                 return false;
             }
         }
 
-        /// <returns>Connect 에 넘긴 축 순서대로의 현재 위치 (µm). 연결 안 됐으면 null.</returns>
+        /// <summary>속도 단계를 X, Y, Z 에 적용한다 (<see cref="SpeedLevelValues"/>, 가/감속도 = 속도 × 10, 약 0.1초에 목표 속도 도달).</summary>
+        public bool SetSpeedLevel(SpeedLevel level)
+        {
+            bool ok = true;
+            foreach (Axis axis in Axes)
+            {
+                int velocity = SpeedLevelValues[(int)axis][(int)level];
+                ok &= SetSpeed(axis, velocity, velocity * 10, velocity * 10);
+            }
+            return ok;
+        }
+
+        #endregion
+
+        #region 조회
+
+        /// <summary>X, Y, Z 상태 복사본 (위치 µm, 이동 중, 리밋, 알람, 속도 µm/s). 미연결이면 null.</summary>
+        public AxisStatus[] GetAxisStatuses()
+        {
+            if (!IsConnected)
+            {
+                return null;
+            }
+            lock (_statusLock)
+            {
+                return _statuses.CloneAll();
+            }
+        }
+
+        /// <summary>X, Y, Z 현재 위치 (µm). 미연결이면 null.</summary>
         public double[] GetPositions()
         {
             if (!IsConnected)
             {
-                Logged?.Invoke(this, "Not connected");
+                _errors.Fail(T("연결되어 있지 않습니다", "Not connected"));
                 return null;
             }
             lock (_statusLock)
@@ -402,7 +456,9 @@ namespace MotorizedStage_SK_PI
             }
         }
 
-        #region private 함수
+        #endregion
+
+        #region private
 
         private bool IsMoving
         {
@@ -415,30 +471,32 @@ namespace MotorizedStage_SK_PI
             }
         }
 
-        private void CheckReady(Axis[] axes)
+        private void CheckConnected()
         {
             if (!IsConnected)
             {
-                throw new Exception("Not connected");
+                throw new DeviceException(T("연결되어 있지 않습니다", "Not connected"));
             }
+        }
+
+        private void CheckReady(Axis[] axes)
+        {
+            CheckConnected();
             foreach (Axis axis in axes)
             {
-                if (!_axes.Contains(axis))
-                {
-                    throw new Exception($"The axis '{axis}' is not in the allowed list of axes.");
-                }
+                AxisNo(axis);
             }
             if (IsMoving)
             {
-                throw new Exception("Command is not ready (moving)");
+                throw new DeviceException(T("이동 중이라 명령을 보낼 수 없습니다", "Command is not ready (moving)"));
             }
         }
 
         private static int AxisNo(Axis axis)
         {
-            if (axis > Axis.Z)
+            if (!Axes.Contains(axis))
             {
-                throw new ArgumentException($"MMT stage axis must be X, Y or Z (got {axis}).");
+                throw new DeviceException(T($"스테이지 축은 X, Y, Z 만 쓸 수 있습니다 ({axis})", $"Stage axis must be X, Y or Z (got {axis})"));
             }
             return (int)axis + 1;
         }
@@ -472,7 +530,7 @@ namespace MotorizedStage_SK_PI
             }
             catch (Exception ex)
             {
-                Logged?.Invoke(this, $"{axis} busy 해제 실패: {ex.Message}");
+                _errors.Fail(T($"{axis} busy 해제 실패: {ex.Message}", $"{axis} failed to clear busy: {ex.Message}"));
             }
         }
 
@@ -512,7 +570,7 @@ namespace MotorizedStage_SK_PI
             Match match = Regex.Match(reply, @"POS(-?\d+)", RegexOptions.IgnoreCase);
             if (!match.Success)
             {
-                throw new Exception("Unexpected position reply: " + reply);
+                throw new DeviceException(T("위치 응답이 이상합니다: ", "Unexpected position reply: ") + reply);
             }
             return int.Parse(match.Groups[1].Value);
         }
@@ -534,7 +592,7 @@ namespace MotorizedStage_SK_PI
             // "*ok" (모터 전원 투입 상태) 또는 "*okAtten" (모터 전원 차단 상태) - 매뉴얼 8.2 Case3
             if (!reply.StartsWith("*ok", StringComparison.OrdinalIgnoreCase))
             {
-                throw new Exception("Unexpected reply: " + reply);
+                throw new DeviceException(T("컨트롤러 응답이 이상합니다: ", "Unexpected reply: ") + reply);
             }
         }
 
@@ -546,7 +604,7 @@ namespace MotorizedStage_SK_PI
                 NetworkStream stream = _stream;
                 if (stream == null)
                 {
-                    throw new InvalidOperationException("Not connected");
+                    throw new DeviceException(T("연결되어 있지 않습니다", "Not connected"));
                 }
 
                 // 매뉴얼 7.1: 응답 완료 후 다음 요청까지 최소 2ms
@@ -580,7 +638,7 @@ namespace MotorizedStage_SK_PI
             int n = stream.Read(buffer, 0, buffer.Length);
             if (n == 0)
             {
-                throw new IOException("Connection closed by controller");
+                throw new IOException(T("컨트롤러가 연결을 끊었습니다", "Connection closed by controller"));
             }
             sb.Append(Encoding.ASCII.GetString(buffer, 0, n));
 
@@ -646,7 +704,7 @@ namespace MotorizedStage_SK_PI
                 }
                 else if (unchanged.ElapsedMilliseconds > 3000)
                 {
-                    Logged?.Invoke(this, "Stopped but still busy - clearing busy state");
+                    _log.Add(T("정지했지만 busy 상태가 남아 정리합니다", "Stopped but still busy - clearing busy state"));
                     await Task.Run(() =>
                     {
                         foreach (Axis axis in axes)
@@ -680,7 +738,7 @@ namespace MotorizedStage_SK_PI
                     {
                         break;
                     }
-                    Logged?.Invoke(this, $"Error : PollingStatus {ex.Message}");
+                    _errors.Fail(T($"상태 갱신 오류: {ex.Message}", $"Status polling error: {ex.Message}"));
                     Disconnect();
                     break;
                 }
@@ -693,8 +751,7 @@ namespace MotorizedStage_SK_PI
         /// </summary>
         private void UpdateStatuses()
         {
-            bool isChanged = false;
-            foreach (Axis axis in _axes)
+            foreach (Axis axis in Axes)
             {
                 string reply = Query($"{AxisNo(axis)}ips");
                 Match pos = Regex.Match(reply, @"POS(-?\d+)", RegexOptions.IgnoreCase);
@@ -706,15 +763,9 @@ namespace MotorizedStage_SK_PI
                 }
 
                 string bits = stat.Groups[1].Value.Replace("_", "");
-                double position = int.Parse(pos.Groups[1].Value) * UmPerMicrostep[(int)axis];
                 // STATUS 비트 (매뉴얼 9.3.2, 문자열 오른쪽 끝이 bit0):
                 // bit1 드라이버 에러, bit3 0=동작 중/1=정지, bit9 과열 에러, bit12 CW 리밋, bit13 CCW 리밋
-                bool isMoving = !Bit(bits, 3);
-                int alarm = Bit(bits, 1) ? 1 : (Bit(bits, 9) ? 2 : 0);
                 // 실장비 확인(2026-09-30): CCW 리밋(bit13)이 + 방향, CW 리밋(bit12)이 - 방향 (REV=1 설정)
-                bool isPosLimit = Bit(bits, 13);
-                bool isNegLimit = Bit(bits, 12);
-
                 lock (_statusLock)
                 {
                     AxisStatus status = _statuses.FirstOrDefault(s => s.Axis == axis);
@@ -722,27 +773,12 @@ namespace MotorizedStage_SK_PI
                     {
                         continue;
                     }
-                    if (status.Position != position || status.IsMoving != isMoving || status.Alarm != alarm
-                        || status.IsPosLimit != isPosLimit || status.IsNegLimit != isNegLimit)
-                    {
-                        status.Position = position;
-                        status.IsMoving = isMoving;
-                        status.Alarm = alarm;
-                        status.IsPosLimit = isPosLimit;
-                        status.IsNegLimit = isNegLimit;
-                        isChanged = true;
-                    }
+                    status.Position = int.Parse(pos.Groups[1].Value) * UmPerMicrostep[(int)axis];
+                    status.IsMoving = !Bit(bits, 3);
+                    status.Alarm = Bit(bits, 1) ? 1 : (Bit(bits, 9) ? 2 : 0);
+                    status.IsPosLimit = Bit(bits, 13);
+                    status.IsNegLimit = Bit(bits, 12);
                 }
-            }
-
-            if (isChanged)
-            {
-                AxisStatus[] snapshot;
-                lock (_statusLock)
-                {
-                    snapshot = (AxisStatus[])_statuses.Clone();
-                }
-                OnStatusChanged?.Invoke(this, snapshot);
             }
         }
 

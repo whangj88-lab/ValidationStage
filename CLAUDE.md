@@ -25,41 +25,78 @@ Scope decisions made in conversation (not to be silently re-litigated in a futur
   explicitly chose this over "A와 유사한 자동 측정 시퀀스" and "수동+자동 병행".)
 - Solution lives in its own folder/repo, not as a project added to A's `.sln`.
 - Probe channel count/layout is **not** hardcoded (unlike A's fixed 7-port `GageCounter`) — see below.
+- **Device control lives in a DLL, `ValidationStage.Devices.dll` (2026-10-06)**, to be handed to an outside company
+  (업체) who calls the API from their own program; the `ValidationStage` exe is the **sample UI given as source**.
+  Decided with the user: C#; one DLL for all three devices (minimal deployment); **current hardware only — no
+  interfaces/abstractions for other stages/probes**; **A is out of scope** (A won't use this DLL — so no A
+  compatibility constraints: namespace/class names/behaviour were changed freely); **polling only, no events**
+  (status `GetAxisStatuses()`, logs `GetLogs()`, connection `IsConnected`); failures return false/null + per-device
+  `LastError` (`DeviceError`: PI GCS code, e.g. 5 = unreferenced, + message); messages Korean/English via
+  `Messages.Language` (in-code string pairs `T(ko, en)`, no .resx/satellite DLLs); XML docs in Korean; no
+  obfuscation; settings txt files still auto-saved in the exe folder. "Low speed after connect" is the caller's job
+  (sample does it), not the DLL's. Probe: **the DLL keeps no read state** — `ReadAll`/`Read` return
+  `ProbeReadResult` (`Ok/NotConnected/Busy/CommError/ModuleNotFound`) and stopping the read loop on `CommError` is the
+  caller's job (user chose this over a DLL-internal read loop; the sample shows it).
 
 ## Build
+
+The user works on two PCs with different VS editions, so the MSBuild path differs — Community on one,
+`C:/Program Files/Microsoft Visual Studio/18/Professional/MSBuild/Current/Bin/amd64/MSBuild.exe` on the other. Use
+whichever exists (or find it with `vswhere -find MSBuild\**\Bin\amd64\MSBuild.exe`).
 
 ```bash
 MSBUILD="C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/amd64/MSBuild.exe"
 "$MSBUILD" ValidationStage.sln -t:Build -p:Configuration=Debug -p:Platform=x64 -v:minimal -m
 ```
 
-Output: `ValidationStage/bin/x64/Debug/ValidationStage.exe`. net48, x64-only (matches A; `PI_GCS2_DLL_x64.dll`
-is a 64-bit native DLL). A `CopyDlls` post-build target copies `PIDll/PI_GCS2_DLL_x64.dll` into the output dir, same
-pattern as A's `CopyDlls` target.
+Two projects: `ValidationStage.Devices` (class library → `ValidationStage.Devices/bin/x64/Debug/`, which holds the
+full **deliverable set**: `ValidationStage.Devices.dll` + `.xml` docs + `PI_GCS2_DLL_x64.dll` + `OrbitLibrary.dll` +
+`InTheHand.Net.Personal.dll`) and `ValidationStage` (sample WinForms exe, `ProjectReference` to the DLL →
+`ValidationStage/bin/x64/Debug/ValidationStage.exe`). net48, x64-only (`PI_GCS2_DLL_x64.dll` is a 64-bit native DLL,
+so the caller's program must be x64 too). Both projects have a `CopyDlls` post-build target copying
+`PIDll/PI_GCS2_DLL_x64.dll` into their output dir (a native DLL isn't carried by the project reference).
 
 No tests, no CI, no lint — same as A.
 
-### Build prerequisite outside the repo
+### Orbit SDK DLLs live in the repo (`OrbitDll/`)
 
-`OrbitLibrary.dll` (the Solartron Orbit3 .NET SDK) is referenced by absolute path from the installed
-**Orbit3 Support Pack for Windows**:
-```
-C:\Program Files (x86)\Solartron Metrology\Orbit3 Support Pack for Windows\Drivers\Library\OrbitLibrary.dll
-```
-A fresh machine needs that support pack installed before this builds — same category of prerequisite as A's
-Matrox/Diolan/Basler absolute-path references. The DLL is AnyCPU/MSIL (confirmed via
+`OrbitLibrary.dll` (the Solartron Orbit3 .NET SDK) is kept in the repo, like `PIDll/` (changed 2026-10-06 so the
+probe DLLs ship with the program the same way the PI DLL does; it used to be referenced by absolute path from the
+installed Orbit3 Support Pack). `OrbitDll/` holds `OrbitLibrary.dll` 1.4.9.1, its dependency
+`InTheHand.Net.Personal.dll`, and `OrbitLibrary.xml` (IntelliSense), copied from
+`C:\Program Files (x86)\Solartron Metrology\Orbit3 Support Pack for Windows\Drivers\Library\`.
+`ValidationStage.Devices.csproj` references it with `HintPath ..\OrbitDll\OrbitLibrary.dll`; Copy Local puts both DLLs in the output dir (no extra copy target
+needed, unlike the native PI DLL). Neither is in the GAC on this PC. Building no longer needs the Support Pack, but a
+PC with a USB Orbit controller (USBIM) still needs its FTDI driver (from the Support Pack). The DLL is AnyCPU/MSIL (confirmed via
 `[System.Reflection.AssemblyName]::GetAssemblyName(...).ProcessorArchitecture` = `MSIL`, not `X86`), so it loads
 fine in this project's x64 process — no bitness conflict with `PI_GCS2_DLL_x64.dll`.
 
 ## Architecture
 
-### Linear stage: `Motion/MMT_Motion.cs` (MMT MMDC-ST466, Ethernet) — replaced `SK_Motion` on 2026-09-30
+### DLL layout: `ValidationStage.Devices/` (namespace `ValidationStage.Devices`, split out 2026-10-06)
+
+| File / class | Was (before the DLL split) | Role |
+|---|---|---|
+| `ValidationSystem` | `Motion/MotionController.cs` + F_Main's probe field | Facade: owns `Stage`, `Hexapod`, `Probe`; axis routing (X/Y/Z→stage, TX/TY/TZ→hexapod), both-device speed/stop, home, settings txt files, merged `GetLogs()`/`GetAxisStatuses()`, own `LastError` (copied from the failing device) |
+| `Hexapod` | `Motion/PI_Motion.cs` + MotionController's hexapod parts (continuous jog, FRF, coord systems, scan, 3D queries) | PI C-887/H-811, TX/TY/TZ only (`Connect(host)`, axes fixed) |
+| `MotorizedStage` | `Motion/MMT_Motion.cs` | MMT X/Y/Z (`Connect(host)`, axes fixed); added `GetAxisStatuses`, `SetSpeedLevel` |
+| `Probe` (+ `ProbeChannel`, `ProbeReadResult`) | `Probe/SolartronProbe.cs` | Orbit3; `Connected` → `IsConnected`; `Zero`/`ZeroAll` now return bool |
+| `Common.cs` | `Motion/AxisStatus.cs` | `Axis` (dropped unused `ALL`), `AxisStatus`, `SpeedLevel`, `DeviceError`, `LogEntry`, `Messages`/`Language`, internal `LogBuffer`/`DeviceErrors`/`DeviceException` |
+| `PI_GCS2.cs` | `Motion/PI_GCS2.cs` (git mv) | PI P/Invoke, now `internal`. File is **CP949-encoded** — edit with ASCII only (sed), never add Korean text |
+
+Every device: public methods catch everything → `false`/`null`, record `LastError` and a log line (`DeviceErrors.Fail`).
+Logs are a per-device `ConcurrentQueue` (cap 1000), drained by `GetLogs()` — use either `ValidationSystem.GetLogs()`
+or the per-device ones, not both. `GetAxisStatuses()` returns clones (null when not connected). The 3D-view queries
+(`GetModelName`, `GetRawPose`, `GetActiveUserCoordSystem`, `GetTransformToZero`) are polled and stay silent (no
+log/LastError). Removed in the move (dead code in A's `PI_Motion`): `UpdateAlarms`, commented-out `UpdateLimits`,
+the `stopCmd` parameter of `StopAsync`, and the events. `Hexapod.MoveAsync` no longer overwrites the caller's array.
+
+### Linear stage: `MotorizedStage` (MMT MMDC-ST466, Ethernet) — replaced `SK_Motion` on 2026-09-30
 
 The stage vendor changed. The X/Y/Z stage is now **MMT** (Micro Motion Technology): controller MMDC-ST466
 (4-axis 2-phase stepper driver), stages X,Y = **AM1-0602-3DY**, Z = **AZ-0803-3DY**, controller axes 1,2,3 = X,Y,Z.
-`MMT_Motion` mirrors `SK_Motion`'s public surface (events, `Connect(axes, host)`, `MoveAsync` in µm, `JogRun`/
-`JogStop`, `StopEmergencyAsync`, `GetPositions`) so MotionController/F_Main barely changed. `SK_Motion.cs` is kept on
-disk but **removed from the .csproj** (in case the old stage comes back).
+`SK_Motion.cs` (the old stage, A's class) is kept on disk in `ValidationStage/Motion/` but is in no .csproj (in case
+the old stage comes back — it would need porting to the DLL's style).
 
 - **Transport = Ethernet TCP** (`192.168.0.123:5001` default; host box accepts `ip` or `ip:port`, saved to
   `StageHost.txt`). The user wanted the controller's USB-B port (shows up as FTDI COM5), but it never answered
@@ -97,49 +134,46 @@ disk but **removed from the .csproj** (in case the old stage comes back).
   whether the position reads 0 after homing (HMO=0) are unverified.
 - Limit mapping verified on the stage (2026-09-30): **CCW limit (bit13) = +, CW limit (bit12) = −** (REV=1).
 
-### Reused from A, unmodified
+### Origin of the hexapod code (A)
 
-`ValidationStage/Motion/AxisStatus.cs`, `PI_Motion.cs`, `PI_GCS2.cs` are byte-for-byte copies of
-`18.CSH030EX_4Line_Calibration/Code/Source/Motion/*.cs` (as was `SK_Motion.cs`, now unused — it had a local fix for
-an infinite `ReadLine` retry that froze the UI). They have **zero dependency on `Global`/`CSH030Ex`/A-specific
-code**. If A's motion layer improves, re-copy rather than hand-patching a divergent copy. That's also why the motion
-classes keep A's namespace `MotorizedStage_SK_PI` (deliberately not renamed in the ValidationStage rename); B's own
-code is `ValidationStage` / `ValidationStage.Probe`.
+`Hexapod`, `PI_GCS2` and `Axis`/`AxisStatus` started as byte-for-byte copies of A's
+`18.CSH030EX_4Line_Calibration/Code/Source/Motion/*.cs` (`PI_Motion`, namespace `MotorizedStage_SK_PI`). Until
+2026-10-06 they were kept identical to A (re-copy instead of patching, reflection to reach `_deviceId`). **That rule
+is gone**: with the DLL split and A ruled out of scope, they were merged/renamed into `ValidationStage.Devices` and
+are now edited freely. A-only hexapod features were kept at the user's request (`SetPivot`/`GetPivot`,
+`SetCoordinateSystem`/`GetCoordinateSystem` = A's TILTEDCS KSD helper, `GetAllPositions`, `DefaultSpeedLevelValues`).
 
-Both the stage class and `PI_Motion` (the PI GCS2 hexapod) expose an identical
-`Connect(Axis[] axes, string target)` — you connect them with whatever subset of the 6-axis `Axis` enum
-(`X, Y, Z, TX, TY, TZ`) they should own. That's what makes requirement 5 (split axes across two controllers) a
-non-issue: no protocol code had to change, just which axes get passed to `Connect()`.
+Requirement 5 (split axes across two controllers) is fixed in the classes: `MotorizedStage.Axes = {X,Y,Z}`,
+`Hexapod.Axes = {TX,TY,TZ}`; each rejects other axes. The hexapod's own X/Y/Z can't be moved through the DLL (user
+choice 2026-10-06) — only read (`GetAllPositions`, `GetRawPose`).
 
-**Unit convention (confirmed by reading `PI_Motion.MoveAsync`, not assumed):** the public API on both devices uses
-**µm for X/Y/Z** and **arcmin (arc-minutes) for TX/TY/TZ**. Internally PI_Motion converts µm→mm and arcmin→deg
-before calling into GCS2. Don't relabel these without re-checking `MoveAsync`'s conversion lines.
+**Unit convention (confirmed by reading the conversion code, not assumed):** the public API on both devices uses
+**µm for X/Y/Z** and **arcmin (arc-minutes) for TX/TY/TZ**. Internally `Hexapod` converts arcmin→deg (÷ −60) before
+calling into GCS2. Don't relabel these without re-checking `MoveAsync`'s conversion lines.
 
 **Jog = press-and-hold continuous motion on both devices:**
-- Stage: `MMT_Motion.JogRun` (`j+`/`j-`, native continuous jog) until `JogStop` (`s`).
-- Hexapod: **`MotionController.HexapodJogRun`/`HexapodJogStop`, not `PI_Motion.JogRun`** (changed 2026-10-01).
-  `PI_Motion.JogRun` (A's original, left untouched) sends a single 0.1° `MVR` per press, so holding the button
-  stopped after 6 arcmin — the user reported this as "jog cuts off midway". PI hexapods have no native continuous
-  jog, so `HexapodJogRun` reads `qTMN`/`qTMX`, `MOV`s toward the travel limit (checked with `qVMO`, halving the
-  distance until reachable since the workspace is coupled to the other axes' tilt), and `HexapodJogStop` = `HLT`.
-  It calls GCS2 directly using `PI_Motion._deviceId` via **reflection**, to keep `PI_Motion.cs` identical to A.
-  Direction: + button = displayed arcmin increases = deg decreases (PI_Motion's arcmin = deg × −60). Not yet
+- Stage: `MotorizedStage.JogRun` (`j+`/`j-`, native continuous jog) until `JogStop` (`s`).
+- Hexapod: `Hexapod.JogRun`/`JogStop` (continuous since 2026-10-01; before that it was A's `PI_Motion.JogRun`, a
+  single 0.1° `MVR` per press, so holding the button stopped after 6 arcmin — the user reported this as "jog cuts off
+  midway"). PI hexapods have no native continuous jog, so `JogRun` reads `qTMN`/`qTMX`, `MOV`s toward the travel
+  limit (checked with `qVMO`, since the workspace is coupled to the other axes' tilt), and `JogStop` = `HLT`.
+  Direction: + button = displayed arcmin increases = deg decreases (arcmin = deg × −60). Not yet
   verified on hardware. First hardware try (2026-10-01) failed with "Failed to read position/limits" (one of
   qPOS/qTMN/qTMX, which one unknown), so now: each failing call logs its GCS error code/text; if qTMN/qTMX fail it
-  falls back to a ±30° span (`FallbackHexapodJogSpanDeg`); if qVMO fails it tries MOV directly and halves on rejection.
+  falls back to a ±30° span (`FallbackJogSpanDeg`); if qVMO fails it tries MOV directly and halves on rejection.
   Result on hardware: qPOS fine, **qTMN/qTMX → GCS error 551 "This query is not supported for this coordinate
   system type"** — so the fallback is the normal path on this hexapod; the first 551 sets
-  `_hexapodLimitQueryUnsupported` (no log at all — user asked to remove even the one-time log, since it's the normal path).
+  `_limitQueryUnsupported` (no log at all — user asked to remove even the one-time log, since it's the normal path).
   Reachability search is a **binary search with qVMO** for the farthest reachable target (0.001° resolution). The
   earlier "halve until reachable" stopped far short of the workspace edge, so near the limit the jog moved a bit,
   stopped, moved a bit… (user-reported 2026-10-01). Halving survives only as the fallback when qVMO itself fails.
 
 **Hexapod IP scan, added 2026-10-01:** [스캔] button between the hexapod IP box and [연결]
-(`HexapodScanButton_Click` → `MotionController.ScanHexapodControllersAsync` = `PI_EnumerateTCPIPDevices`, the same
+(`HexapodScanButton_Click` → `Hexapod.ScanControllersAsync` (null on failure) = `PI_EnumerateTCPIPDevices`, the same
 broadcast search PIMikroMove's TCP/IP "Search" does — the "localhost" the user saw there is just that dialog's default
 host text). One result fills the IP box; several show a `ContextMenuStrip` to pick from. It never connects by itself.
-IP/port are regex-parsed from the description (`ParseHostFromDescription`); a non-50000 port only logs a warning
-because `PI_Motion` always connects on 50000. Only finds controllers on the PC's own subnet. Not yet run on hardware —
+IP/port are regex-parsed from the description (static `Hexapod.ParseHostFromDescription`); a non-50000 port only logs a warning
+because `Hexapod` always connects on `Hexapod.Port` = 50000. Only finds controllers on the PC's own subnet. Not yet run on hardware —
 the exact description format is assumed.
 
 **Hexapod coordinate systems, added 2026-10-02:** [좌표계] button in the hexapod connection row (after [해제]; the
@@ -153,16 +187,16 @@ PIMikroMove's, **not** in the GCS2 DLL (the DLL's only dialogs are `InterfaceSet
 Scope: **list + create + activate + delete** — Save/Reset is present but disabled (tooltip: use PIMikroMove).
 - **Parent (added 2026-10-02, user-reported):** a `KSD` alone always lands under ZERO (seen on hardware, `Image3.png`).
   [+] now remembers the tree selection as `_newParent` (selection stays visible); after the define, if the parent
-  isn't ZERO, `LinkHexapodCoordSystem` = `KLN child parent`. Link failure is reported separately (CS exists, unlinked).
-- **Delete (added 2026-10-02):** trash = `DeleteHexapodCoordSystem` (`KRM`) after a confirm; only non-ZERO, non-`(PI)`,
+  isn't ZERO, `Hexapod.LinkCoordSystem` = `KLN child parent`. Link failure is reported separately (CS exists, unlinked).
+- **Delete (added 2026-10-02):** trash = `Hexapod.DeleteCoordSystem` (`KRM`) after a confirm; only non-ZERO, non-`(PI)`,
   inactive CSs; warns that the controller may refuse when the CS has children. KLN/KRM not yet run on hardware.
 - **`KLS?` returns XML** (measured 2026-10-02): `<SingleCoordinateSystem><ZERO Name= Parent= Used= Type=><POS X=.. U=../>
   <NLM/><PLM/><SSL/><SPI R S T/><SST/></ZERO><PI_BASE Type="KSB(PI)" Parent="PI_LEVELLING">…<PI_LEVELLING
-  Type="KLD(PI)" Parent="HEXAPOD">…`. Parsed with `XElement` in `MotionController.GetHexapodCoordSystems`. On this
+  Type="KLD(PI)" Parent="HEXAPOD">…`. Parsed with `XElement` in `Hexapod.GetCoordSystems`. On this
   hexapod: ZERO limits X ±17.02, Y ±16.02, Z ±6.52 mm, U/V ±10.005, W ±21.005 deg.
 - `KEN?` returns only `PI_LEVELLING=KLD(PI)`, `PI_BASE=KSB(PI)` — not ZERO. Like PIMikroMove, `(PI)` types are hidden and
   "no visible CS active ⇒ ZERO is active". `KLN?`: `ZERO=PI_BASE PI_LEVELLING HEXAPOD`.
-- [+] → editable Name/Type(KSD/KST/KSW)/Position → [Set Coord. Sys.] (`DefineHexapodCoordSystem`). Selecting an existing
+- [+] → editable Name/Type(KSD/KST/KSW)/Position → [Set Coord. Sys.] (`Hexapod.DefineCoordSystem`). Selecting an existing
   inactive KSD/KST/KSW lets you edit and re-Set it; ZERO, `(PI)` and active ones are read-only. Name `[A-Za-z0-9_]+`.
   [Activate CS] = `KEN` with a confirm (platform doesn't move, but positions and the saved `HexapodHome.txt` meaning
   change). Values are **controller-native mm/deg with no sign flip** — unlike the main screen's arcmin (= deg × −60).
@@ -189,8 +223,8 @@ PresentationCore/PresentationFramework/WindowsBase/WindowsFormsIntegration/Syste
   rotated U=180°** (that's why PIMikroMove's KSD axis labels look mirrored). Rotation order assumed fixed-axis U→V→W
   (`Rotate X, Y, Z` appended). Correct at the home pose; not yet compared against PIMikroMove with a real tilt. The
   triad (red X / green Y / blue Z) shows the active CS on the platform (`csFrame·platformPose`).
-- `MotionController`: `GetHexapodModelName`, `GetHexapodRawPose`, `GetHexapodActiveUserCoordSystem` (KEN? minus
-  `(PI)`), `GetHexapodTransformToZero` (KLT?) — polled (pose 100 ms, CS 1 s), so they return null without logging.
+- `Hexapod`: `GetModelName`, `GetRawPose`, `GetActiveUserCoordSystem` (KEN? minus
+  `(PI)`), `GetTransformToZero` (KLT?) — polled (pose 100 ms, CS 1 s), so they return null without logging.
 - **Axis labels (added 2026-10-02, user request):** each arrow tip is projected to screen (`HexapodScene.Project`,
   FieldOfView = horizontal) and a 2D `TextBlock` on a `Canvas` overlay is placed there — `X TILTEDCS` etc. on the
   platform triad (`SetCoordSystemName` when the active CS changes) and `X (ZERO)` etc. on the floor axes. Deliberately
@@ -201,36 +235,36 @@ PresentationCore/PresentationFramework/WindowsBase/WindowsFormsIntegration/Syste
 
 **Hexapod reference (FRF), added 2026-10-01:** after the hexapod controller is power-cycled, every move fails with
 GCS error 5 "Unallowable move attempted on unreferenced axis, or move attempted with servo off" (seen on hardware).
-`MotionController.IsHexapodReferenced` (`qFRF` on all 6 axes `X Y Z U V W` — FRF is whole-platform) and
-`ReferenceHexapodAsync` (servo ON via `SVO` if `qSVO` shows any off → `FRF` all 6 → wait until not moving and
+`Hexapod.IsReferenced` (`qFRF` on all 6 axes `X Y Z U V W` — FRF is whole-platform) and
+`Hexapod.ReferenceAsync` (servo ON via `SVO` if `qSVO` shows any off → `FRF` all 6 → wait until not moving and
 `qFRF` all true, 120 s timeout). UI: [레퍼런스] button first in the hexapod home row (confirm dialog — the platform
 moves to the reference position, all axes 0); right after a successful hexapod connect, if unreferenced, it logs and
 offers the same dialog. While referencing, the hexapod per-axis [정지] buttons and [전체 정지] are disabled (user
-request); [전체 정지 (비상)] deliberately stays enabled for safety. `HexapodJogRun` refuses with a "[레퍼런스] 먼저" message when unreferenced. Not used:
-`PI_Motion.ReferenceAsync` (its `WaitForReadyAsync` can return before motion starts). Not yet verified on hardware.
+request); [전체 정지 (비상)] deliberately stays enabled for safety. `Hexapod.JogRun` refuses with a "레퍼런스를 먼저" message when unreferenced. A's original
+`PI_Motion.ReferenceAsync` (its `WaitForReadyAsync` could return before motion starts) was replaced by this one. Not yet verified on hardware.
 
 F_Main's `BindAxis` calls jogRun on `MouseDown` and jogStop on `MouseUp`, plus on `MouseCaptureChanged` (once per
 press) so losing the mouse while holding (Alt+Tab etc.) still stops the hexapod instead of letting it run to the limit.
 
-**Stop buttons (added 2026-09-30):** a [정지] button per axis row (`BindStop` → `MotionController.StopAxisAsync`) and
+**Stop buttons (added 2026-09-30):** a [정지] button per axis row (`BindStop` → `ValidationSystem.StopAxisAsync`) and
 [전체 정지] next to [전체 정지 (비상)] (`StopAllAsync` vs `EmergencyStopAllAsync`). Normal = decelerating stop: MMT
 `S` (+ busy clearing) and PI `HLT`. Emergency = MMT `@s` and PI `STP`. MMT only has the one `S` stop command, so
 normal vs emergency differs only on the hexapod.
 
-**Speed levels:** `ApplySpeedLevel(int level)` in `Motion/MotionController.cs`. Stage: `MMT_Motion.SpeedLevelValues`
+**Speed levels:** `ValidationSystem.SetSpeedLevel(SpeedLevel)` → `MotorizedStage.SetSpeedLevel` + `Hexapod.SetSpeedLevel`. Stage: `MotorizedStage.SpeedLevelValues`
 (µsteps/s; user asked for conservative values: all axes 0.5/2/5 rev/s = X,Y 0.5/2/5 mm/s, Z ≈0.18/0.73/1.8 mm/s), accel/decel = 10× velocity.
-Hexapod: A's formula `PI.SetSpeed(speedValue * 1.5)` (from `Source/Motion/F_Motion_SK_PI.cs`). One shared combo drives both devices (hexapod speed
-is PI `VLS`, a single system velocity, not per-axis); `ApplySpeedLevel` skips a device that isn't connected. **After
+Hexapod: A's formula `SetSpeed(DefaultSpeedLevelValues[level] * 1.5)` (from A's `Source/Motion/F_Motion_SK_PI.cs`). One shared combo drives both devices (hexapod speed
+is PI `VLS`, a single system velocity, not per-axis); `ValidationSystem.SetSpeedLevel` skips a device that isn't connected. **After
 every successful connect (either device) the speed is forced back to 저속** (`F_Main.ResetSpeedToLow`, user request
 2026-09-29) so a device never moves at whatever speed its controller retained; because the combo is shared, this
 also resets the other already-connected device to 저속 so the combo always matches reality.
 
-### New: `Probe/SolartronProbe.cs`
+### Probe: `ValidationStage.Devices/Probe.cs` (was `Probe/SolartronProbe.cs`)
 
 This replaces A's `GageCounter` (`Source/MySingleton.cs`), which drove 7 fixed COM ports 1:1 with 7 gauges via a
 plain-text `"GA01\r\n"` protocol. Solartron's Orbit3 system is architecturally different: **one Orbit network
 (RS232IM/USBIM/ETHIM controller) carries multiple DP modules daisy-chained on a shared bus**, discovered/identified
-in software rather than wired 1:1 to COM ports. `SolartronProbe` therefore:
+in software rather than wired 1:1 to COM ports. `Probe` therefore:
 
 - Connects once via `OrbitServer.Connect()` (auto-detects whatever controller type is attached — no need to know
   in advance whether it's RS232IM/USBIM/ETHIM).
@@ -262,19 +296,20 @@ in software rather than wired 1:1 to COM ports. `SolartronProbe` therefore:
   discarded if reading was stopped/disconnected meanwhile. `Zero`/`ZeroAll` wait up to 1 s for `_busLock`; `_labels`
   has its own `lock` since `SetLabel` (UI) and `ReadAll` (background) touch it concurrently.
   While reading is stopped, [스캔]/[새 모듈 추가] still update the grid via `UpdateProbeListWhileStopped` →
-  `SolartronProbe.GetModuleList()` (module IDs/labels only, no `ReadingInUnits`, so the bus stays quiet); new rows
+  `Probe.GetModuleList()` (module IDs/labels only, no `ReadingInUnits`, so the bus stays quiet); new rows
   show "-" / "읽기 중지", existing rows keep their last values.
   Tried and **removed** (user: didn't work): a `FindHotswapped()`-based recovery (auto on connect + [모듈 복구]
   button doing `ClearModules`→`FindHotswapped`→`Ping`). Don't re-add it. (A NetSpeed/187.5k-mismatch theory from
   the manuals was also floated; the test above made it unnecessary.)
 - All SDK access is serialized on `_busLock`: Ping/Notify `lock`; `ReadAll` uses `Monitor.TryEnter` and returns
-  `null` = "busy, skip this tick"; `Zero`/`ZeroAll`/`Disconnect` wait briefly then give up with a log message. `Disconnect` calls `StopNotify()` first if a [새 모듈 추가] wait is pending.
+  `Status = Busy` = "skip this tick"; `Zero`/`ZeroAll`/`Disconnect` wait briefly then give up with `LastError` + log.
+  Per-module read errors are **not** written to `LastError`/log by the DLL (they're in the result); the sample logs them. `Disconnect` calls `StopNotify()` first if a [새 모듈 추가] wait is pending.
   F_Main clears the grid on 해제 and removes rows whose module is no longer in the list.
 - **Probe values are in µm** (user request 2026-09-30): `ReadMicrometers` converts `ReadingInUnits` using the
   module's `UnitsOfMeasure` (DP reports "mm" → ×1000); unknown units throw so the row shows an error instead of a
   silently wrong number. Zero offsets are stored in µm too. Grid shows `0.000` µm, header "측정값 (µm)".
 - **Per-row [읽기] button** (`_colRead`, next to [영점], added 2026-10-01): one-shot read of that module only —
-  `SolartronProbe.Read(moduleId)` (waits ≤1 s for `_busLock`, same error shape as `ReadAll`) run via `Task.Run` from
+  `Probe.Read(moduleId)` (waits ≤1 s for `_busLock`, same error shape as `ReadAll`) run via `Task.Run` from
   `F_Main.ReadSingleProbeAsync`; `_singleReadsInFlight` blocks double-clicks on the same module. Works while
   continuous reading is stopped (state shows "개별 읽기"); an error is shown/logged but does **not** stop continuous reading.
 - Zero/tare is a **software offset** (`Zero`/`ZeroAll`, stored per module ID), not a hardware preset. `OrbitModule`
@@ -283,13 +318,13 @@ in software rather than wired 1:1 to COM ports. `SolartronProbe` therefore:
 Reference material, if the SDK needs re-checking:
 - `OrbitLibrary.xml` (next to the DLL) — full XML-doc API reference, grep-able.
 - `C:\ProgramData\Solartron Metrology\Solartron Support Files\Examples\Orbit3 CSharp Example\` — Solartron's own
-  working C# sample (`Form1.cs`); `SolartronProbe.cs`'s Connect/Scan/Read/Zero pattern follows this example.
+  working C# sample (`Form1.cs`); `Probe.cs`'s Connect/Scan/Read/Zero pattern follows this example.
 - Manuals under `...\Orbit3 Support Pack for Windows\Manuals\` (PDF; use `pdftotext -layout` to search them quickly).
 
-### `Motion/MotionController.cs`
+### `ValidationStage.Devices/ValidationSystem.cs` (was `Motion/MotionController.cs`)
 
-Thin wrapper, not a big abstraction: owns one `MMT_Motion` (`StageAxes = {X,Y,Z}`) and one `PI_Motion`
-(`HexapodAxes = {TX,TY,TZ}`), plus the shared speed-level and emergency-stop-both-devices logic described above.
+Thin facade, not a big abstraction: owns one `MotorizedStage`, one `Hexapod` and one `Probe`, plus the axis routing
+(`MoveAbsAsync`/`JogRun`/`JogStop`/`StopAxisAsync`) and the shared speed-level and stop-both-devices logic described above.
 Also owns per-axis absolute move (`MoveAbsAsync`, machine coordinates) and **home (원점), split per device**.
 Stage: controller-native — `HomeStageAsync` (`hm0`), `SetStageZero` (`p0`), `MoveStageToZeroAsync` (see the MMT
 section above). Hexapod: `SetHexapodHomeFromCurrent`/`MoveHexapodHomeAsync` (TX,TY,TZ arcmin → `HexapodHome.txt`,
@@ -297,8 +332,9 @@ in the exe folder like `ProbeLabels.txt`). The hexapod version mirrors A's `SetH
 `MoveHome6D` (the tail end of A's `FindCSHorg`): nothing is written to the controller, home is just a saved target. One
 deliberate difference from A (user's choice): the hexapod home stores the **actual current TX/TY/TZ**, not forced 0 —
 A zeroes them because it corrects tilt via vision, which B doesn't have.
-`F_Main` still talks to `_motion.Stage` / `_motion.Hexapod` directly for anything not shared (connect/disconnect
-per device, jog).
+Connect/save of `StageHost.txt`/`HexapodHost.txt` is here too (`ConnectStageAsync`, `ConnectHexapod`); the device
+classes themselves never touch settings files (except `Probe`'s `ProbeLabels.txt`). `F_Main` talks to
+`_system.Hexapod` / `_system.Probe` directly for device-only features (reference, scan, coord systems, probe).
 
 ### `F_Main.cs`
 
@@ -308,13 +344,19 @@ designer to named handlers in `F_Main.cs`; jog buttons and the axis→label dict
 `BindAxis()` because they need per-axis parameters. Keep `InitializeComponent` designer-parsable (no lambdas/loops).
 Layout: stage panel (left) + hexapod panel (right) on top, speed/e-stop row,
 probe `DataGridView` (auto-discovered rows, editable label column, per-row zero button) filling the middle, log
-textbox docked at the bottom. A `Timer` (300 ms) drives probe-grid refresh; motion readouts update from
-`OnStatusChanged` events pushed by `MMT_Motion`/`PI_Motion` on a background thread (marshalled via `RunOnUi`).
+textbox docked at the bottom. `_probeTimer` (300 ms) drives probe-grid refresh; `_statusTimer` (100 ms, added
+2026-10-06 when events were dropped) polls `IsConnected` (connection labels, updated only on change so "연결 중..."/
+"연결 실패" aren't overwritten), `_system.GetAxisStatuses()` and `_system.GetLogs()`. Everything runs on the UI
+thread now, so the old `RunOnUi` marshalling is gone. F_Main doubles as the **sample code for the 업체** — keep it
+readable and showing the intended usage (low speed after connect, stop probe loop on `CommError`, etc.).
 
 ## Status / what's not yet verified
 
-Build and UI smoke-tested (compiles clean, launches, screenshot-verified layout) **without real hardware attached**
-in this session. Not yet verified against physical equipment:
+Build and UI smoke-tested (compiles clean, launches, screenshot-verified layout) **without real hardware attached**.
+The DLL split (2026-10-06) was checked the same way plus a PowerShell `Add-Type` smoke test of the DLL with nothing
+connected (failed hexapod connect → `LastError` + logs, probe `NotConnected`, language switch); **the refactored
+device classes have not run against hardware yet** — re-check connect/jog/move/stop/reference/probe read after it.
+Not yet verified against physical equipment:
 - MMT stage over Ethernet (connect/`st0`/`ips` polling only checked read-only so far), PI hexapod over a real host/IP — jog direction, step size, speed levels, absolute
   move and home save/move. (A's hexapod IP is `169.254.3.106`.) Connection settings persist the same way: after a
   **successful** `ConnectStage`/`ConnectHexapod`, the port/host is saved to `StageHost.txt`/`HexapodHost.txt` and
@@ -322,5 +364,5 @@ in this session. Not yet verified against physical equipment:
 - Solartron Orbit3 controller + actual DP10/DP20 modules — Connect/Scan/NotifyAddModule/Zero end-to-end.
 
 When testing against real hardware turns up a wrong assumption (e.g. jog direction sign, a unit label), fix it in
-the class it actually belongs to (`MMT_Motion`/`PI_Motion` for motion, `SolartronProbe` for probe), not by papering
+the DLL class it actually belongs to (`MotorizedStage`/`Hexapod` for motion, `Probe` for probe), not by papering
 over it in `F_Main`.

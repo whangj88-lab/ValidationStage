@@ -1,4 +1,4 @@
-﻿using MotorizedStage_SK_PI;
+﻿using ValidationStage.Devices;
 using System;
 using System.Globalization;
 using System.Linq;
@@ -18,22 +18,22 @@ namespace ValidationStage
     {
         private const int CoordSystemRefreshTicks = 10;   // 활성 좌표계/변환은 1초마다 다시 읽는다
 
-        private readonly MotionController _motion;
+        private readonly Hexapod _hexapod;
         private HexapodScene _scene;
         private string _model;
         private string _activeCs = "ZERO";
         private Matrix3D _csToZero = Matrix3D.Identity;   // 활성 좌표계 → ZERO (행 벡터 규약)
         private int _tick;
 
-        public F_Hexapod3D(MotionController motion)
+        public F_Hexapod3D(Hexapod hexapod)
         {
             InitializeComponent();
-            _motion = motion;
+            _hexapod = hexapod;
         }
 
         private void F_Hexapod3D_Load(object sender, EventArgs e)
         {
-            _model = _motion.GetHexapodModelName();
+            _model = _hexapod.GetModelName();
             if (_model == null)
             {
                 _statusLabel.Text = "헥사포드 모델을 읽지 못했습니다 (연결 상태 확인)";
@@ -70,7 +70,7 @@ namespace ValidationStage
             {
                 return;
             }
-            if (!_motion.Hexapod.IsConnected)
+            if (!_hexapod.IsConnected)
             {
                 _statusLabel.Text = $"{_model} | 헥사포드 연결 안됨 - 마지막 자세를 표시 중";
                 return;
@@ -81,7 +81,7 @@ namespace ValidationStage
                 RefreshCoordSystem();
             }
 
-            double[] pose = _motion.GetHexapodRawPose();
+            double[] pose = _hexapod.GetRawPose();
             if (pose == null)
             {
                 return;
@@ -99,8 +99,8 @@ namespace ValidationStage
 
         private void RefreshCoordSystem()
         {
-            string cs = _motion.GetHexapodActiveUserCoordSystem();
-            var chain = cs == null ? null : _motion.GetHexapodTransformToZero(cs);
+            string cs = _hexapod.GetActiveUserCoordSystem();
+            var chain = cs == null ? null : _hexapod.GetTransformToZero(cs);
             if (chain == null)
             {
                 return;   // 다음 주기에 다시 시도

@@ -129,6 +129,7 @@
             this._probeConnLabel = new System.Windows.Forms.Label();
             this._logBox = new System.Windows.Forms.TextBox();
             this._probeTimer = new System.Windows.Forms.Timer(this.components);
+            this._statusTimer = new System.Windows.Forms.Timer(this.components);
             this._topPanel.SuspendLayout();
             this._hexapodGroup.SuspendLayout();
             this._hexapodAxisTable.SuspendLayout();
@@ -1337,7 +1338,12 @@
             // 
             this._probeTimer.Interval = 300;
             this._probeTimer.Tick += new System.EventHandler(this.ProbeTimer_Tick);
-            // 
+            //
+            // _statusTimer
+            //
+            this._statusTimer.Interval = 100;
+            this._statusTimer.Tick += new System.EventHandler(this.StatusTimer_Tick);
+            //
             // F_Main
             // 
             this.ClientSize = new System.Drawing.Size(1384, 781);
@@ -1452,6 +1458,7 @@
         private System.Windows.Forms.DataGridViewButtonColumn _colZero;
         private System.Windows.Forms.TextBox _logBox;
         private System.Windows.Forms.Timer _probeTimer;
+        private System.Windows.Forms.Timer _statusTimer;
         private System.Windows.Forms.NumericUpDown _xTargetInput;
         private System.Windows.Forms.Button _xMoveButton;
         private System.Windows.Forms.Button _xStopButton;

@@ -1,4 +1,4 @@
-using MotorizedStage_SK_PI;
+using ValidationStage.Devices;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -19,21 +19,21 @@ namespace ValidationStage
     {
         private static readonly string[] Axes = { "X", "Y", "Z", "U", "V", "W" };
 
-        private readonly MotionController _motion;
+        private readonly ValidationSystem _system;
         private readonly Action<string> _log;
-        private List<MotionController.HexapodCoordSystem> _systems = new List<MotionController.HexapodCoordSystem>();
+        private List<HexapodCoordSystem> _systems = new List<HexapodCoordSystem>();
         private TextBox[] _positionBoxes;
         private bool _creatingNew;
         private string _newParent = "ZERO";   // [+] 를 누를 때 트리에서 선택돼 있던 좌표계 = 새 좌표계의 부모
         private int _collapsedWidth;
 
-        public F_CoordSystem(MotionController motion, Action<string> log)
+        public F_CoordSystem(ValidationSystem system, Action<string> log)
         {
             InitializeComponent();
-            _motion = motion;
+            _system = system;
             _log = log;
             _positionBoxes = new[] { _xBox, _yBox, _zBox, _uBox, _vBox, _wBox };
-            Text = $"Manage Coordinate Systems ({motion.HexapodHost})";
+            Text = $"Manage Coordinate Systems ({system.HexapodHost})";
 
             const string notSupported = "이 프로그램에서는 지원하지 않습니다 (PIMikroMove 에서 하세요)";
             _toolTip.SetToolTip(_addButton, "새 좌표계 (선택한 좌표계의 하위로)");
@@ -55,19 +55,19 @@ namespace ValidationStage
 
         private void RefreshButton_Click(object sender, EventArgs e)
         {
-            string selected = (_csTree.SelectedNode?.Tag as MotionController.HexapodCoordSystem)?.Name;
+            string selected = (_csTree.SelectedNode?.Tag as HexapodCoordSystem)?.Name;
             RefreshTree(selected);
         }
 
         private void RefreshTree(string selectName = null)
         {
             _creatingNew = false;
-            if (!_motion.Hexapod.IsConnected)
+            if (!_system.Hexapod.IsConnected)
             {
                 SetStatus("헥사포드가 연결되어 있지 않습니다");
                 return;
             }
-            var systems = _motion.GetHexapodCoordSystems();
+            var systems = _system.Hexapod.GetCoordSystems();
             if (systems == null)
             {
                 SetStatus("좌표계 목록을 읽지 못했습니다 - 메인 화면 로그를 확인하세요");
@@ -104,7 +104,7 @@ namespace ValidationStage
             _csTree.EndUpdate();
 
             TreeNode toSelect = (selectName != null && nodes.TryGetValue(selectName, out TreeNode named) ? named : null)
-                ?? nodes.Values.FirstOrDefault(n => ((MotionController.HexapodCoordSystem)n.Tag).IsActive)
+                ?? nodes.Values.FirstOrDefault(n => ((HexapodCoordSystem)n.Tag).IsActive)
                 ?? nodes.Values.FirstOrDefault();
             _csTree.SelectedNode = toSelect;
             if (toSelect == null)
@@ -116,7 +116,7 @@ namespace ValidationStage
         private void CsTree_AfterSelect(object sender, TreeViewEventArgs e)
         {
             _creatingNew = false;
-            ShowProperties(e.Node?.Tag as MotionController.HexapodCoordSystem);
+            ShowProperties(e.Node?.Tag as HexapodCoordSystem);
         }
 
         #endregion
@@ -124,7 +124,7 @@ namespace ValidationStage
         #region CS Properties
 
         /// <summary>선택한 좌표계를 오른쪽 CS Properties 에 표시한다. 직접 만든 타입(KSD/KST/KSW)이고 비활성이면 위치를 고쳐 재정의할 수 있다.</summary>
-        private void ShowProperties(MotionController.HexapodCoordSystem cs)
+        private void ShowProperties(HexapodCoordSystem cs)
         {
             _nameBox.Text = cs?.Name ?? "";
             _nameBox.ReadOnly = true;
@@ -146,7 +146,7 @@ namespace ValidationStage
                     ? v.ToString("0.000", CultureInfo.InvariantCulture) : "";
             }
 
-            bool editable = cs != null && !cs.IsActive && MotionController.DefinableCoordSystemTypes.Contains(cs.Type);
+            bool editable = cs != null && !cs.IsActive && Hexapod.DefinableCoordSystemTypes.Contains(cs.Type);
             SetPositionsEditable(editable);
             _setButton.Enabled = editable;
             _activateButton.Enabled = cs != null && !cs.IsActive;
@@ -159,7 +159,7 @@ namespace ValidationStage
         /// 추가 속성(이동 한계 등): POS 외의 항목을 축(행) × 항목(열) 표로 보여 준다. 고정폭 정렬이 깨지지 않게 머리글은 영문만 쓴다.
         /// NLM/PLM = 소프트 한계 하한/상한, SSL = 소프트 한계 사용(1/0), SST = 스텝 크기. 축이 X..W 가 아닌 항목(SPI 피벗 R,S,T)은 아래에 따로.
         /// </summary>
-        private static string FormatExtraItems(MotionController.HexapodCoordSystem cs)
+        private static string FormatExtraItems(HexapodCoordSystem cs)
         {
             if (cs == null)
             {
@@ -226,14 +226,14 @@ namespace ValidationStage
         /// </summary>
         private void AddButton_Click(object sender, EventArgs e)
         {
-            var selected = _csTree.SelectedNode?.Tag as MotionController.HexapodCoordSystem;
+            var selected = _csTree.SelectedNode?.Tag as HexapodCoordSystem;
             _newParent = selected?.Name ?? "ZERO";
             _creatingNew = true;   // 트리 선택은 그대로 둬서 부모가 어디인지 보이게 한다
 
             _nameBox.Text = "";
             _nameBox.ReadOnly = false;
             _typeCombo.Items.Clear();
-            _typeCombo.Items.AddRange(MotionController.DefinableCoordSystemTypes);
+            _typeCombo.Items.AddRange(Hexapod.DefinableCoordSystemTypes);
             _typeCombo.SelectedIndex = 0;   // KSD
             _typeCombo.Enabled = true;
             foreach (var box in _positionBoxes)
@@ -290,7 +290,7 @@ namespace ValidationStage
                 return;
             }
 
-            if (!_motion.DefineHexapodCoordSystem(type, name, values))
+            if (!_system.Hexapod.DefineCoordSystem(type, name, values))
             {
                 SetStatus("정의 실패 - 메인 화면 로그를 확인하세요 (활성 상태인 좌표계는 수정할 수 없습니다)");
                 return;
@@ -301,7 +301,7 @@ namespace ValidationStage
             // 정의만 하면 ZERO 하위가 되므로, 새로 만들 때 선택돼 있던 좌표계가 ZERO 가 아니면 그 밑으로 연결한다.
             if (_creatingNew && _newParent != "ZERO")
             {
-                if (_motion.LinkHexapodCoordSystem(name, _newParent))
+                if (_system.Hexapod.LinkCoordSystem(name, _newParent))
                 {
                     _log($"[Hexapod] 좌표계 '{name}' → '{_newParent}' 하위로 연결");
                 }
@@ -317,7 +317,7 @@ namespace ValidationStage
         }
 
         /// <summary>삭제 가능: 직접 만든 좌표계이면서 비활성. ZERO / PI 내부(PI_BASE 등) / 활성 좌표계는 안 된다.</summary>
-        private static bool IsDeletable(MotionController.HexapodCoordSystem cs)
+        private static bool IsDeletable(HexapodCoordSystem cs)
         {
             return cs != null && !cs.IsActive && !cs.IsPiInternal && cs.Name != "ZERO";
         }
@@ -325,7 +325,7 @@ namespace ValidationStage
         /// <summary>[휴지통]: 선택한 좌표계를 삭제(KRM)한다. 하위 좌표계가 있으면 컨트롤러가 거부할 수 있다.</summary>
         private void DeleteButton_Click(object sender, EventArgs e)
         {
-            var cs = _csTree.SelectedNode?.Tag as MotionController.HexapodCoordSystem;
+            var cs = _csTree.SelectedNode?.Tag as HexapodCoordSystem;
             if (!IsDeletable(cs))
             {
                 SetStatus("ZERO / PI 내부 / 활성 좌표계는 삭제할 수 없습니다");
@@ -338,7 +338,7 @@ namespace ValidationStage
             {
                 return;
             }
-            if (_motion.DeleteHexapodCoordSystem(cs.Name))
+            if (_system.Hexapod.DeleteCoordSystem(cs.Name))
             {
                 SetStatus($"'{cs.Name}' 삭제 완료");
                 _log($"[Hexapod] 좌표계 '{cs.Name}' 삭제");
@@ -352,7 +352,7 @@ namespace ValidationStage
 
         private void ActivateButton_Click(object sender, EventArgs e)
         {
-            if (!(_csTree.SelectedNode?.Tag is MotionController.HexapodCoordSystem cs))
+            if (!(_csTree.SelectedNode?.Tag is HexapodCoordSystem cs))
             {
                 SetStatus("활성화할 좌표계를 목록에서 고르세요");
                 return;
@@ -365,7 +365,7 @@ namespace ValidationStage
             {
                 return;
             }
-            if (_motion.ActivateHexapodCoordSystem(cs.Name))
+            if (_system.Hexapod.ActivateCoordSystem(cs.Name))
             {
                 SetStatus($"'{cs.Name}' 활성화 완료");
                 _log($"[Hexapod] 좌표계 '{cs.Name}' 활성화");

@@ -1,8 +1,10 @@
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 17
-VisualStudioVersion = 17.4.33213.308
+# Visual Studio Version 18
+VisualStudioVersion = 18.7.11911.148 stable
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ValidationStage", "ValidationStage\ValidationStage.csproj", "{7C2C6C2E-8C9D-4E6B-9E3D-1F9F6C6B9A11}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ValidationStage.Devices", "ValidationStage.Devices\ValidationStage.Devices.csproj", "{311C222E-44E5-4BFE-A0D3-7B835DE94602}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -14,6 +16,10 @@ Global
 		{7C2C6C2E-8C9D-4E6B-9E3D-1F9F6C6B9A11}.Debug|x64.Build.0 = Debug|x64
 		{7C2C6C2E-8C9D-4E6B-9E3D-1F9F6C6B9A11}.Release|x64.ActiveCfg = Release|x64
 		{7C2C6C2E-8C9D-4E6B-9E3D-1F9F6C6B9A11}.Release|x64.Build.0 = Release|x64
+		{311C222E-44E5-4BFE-A0D3-7B835DE94602}.Debug|x64.ActiveCfg = Debug|x64
+		{311C222E-44E5-4BFE-A0D3-7B835DE94602}.Debug|x64.Build.0 = Debug|x64
+		{311C222E-44E5-4BFE-A0D3-7B835DE94602}.Release|x64.ActiveCfg = Release|x64
+		{311C222E-44E5-4BFE-A0D3-7B835DE94602}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

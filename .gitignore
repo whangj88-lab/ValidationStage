@@ -1,3 +1,5 @@
 .vs/
 ValidationStage/bin/
 ValidationStage/obj/
+ValidationStage.Devices/bin/
+ValidationStage.Devices/obj/
