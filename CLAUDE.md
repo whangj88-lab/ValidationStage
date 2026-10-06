@@ -134,6 +134,8 @@ the old stage comes back — it would need porting to the DLL's style).
   value (HMA/HMAD ×10, HMVF ÷10; write-if-different). Position counters restart at 0 on controller power-up, so run
   [기계 원점 찾기] after powering the controller on. Not yet run on the stage: homing direction (HME=1 stored) and
   whether the position reads 0 after homing (HMO=0) are unverified.
+- **Per-axis busy check (2026-10-06, user request):** `CheckReady` rejects a command only if one of *its own* axes is
+  moving, so e.g. Y can jog/move while X is moving. (Before, any moving axis blocked all stage commands.)
 - Limit mapping verified on the stage (2026-09-30): **CCW limit (bit13) = +, CW limit (bit12) = −** (REV=1).
 
 ### Origin of the hexapod code (A)

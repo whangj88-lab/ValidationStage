@@ -460,17 +460,6 @@ namespace ValidationStage.Devices
 
         #region private
 
-        private bool IsMoving
-        {
-            get
-            {
-                lock (_statusLock)
-                {
-                    return _statuses.Any(status => status.IsMoving);
-                }
-            }
-        }
-
         private void CheckConnected()
         {
             if (!IsConnected)
@@ -479,6 +468,7 @@ namespace ValidationStage.Devices
             }
         }
 
+        /// <summary>명령할 축만 본다. 다른 축이 이동 중이어도 이 축들이 멈춰 있으면 명령할 수 있다 (MMDC 는 축마다 독립 구동).</summary>
         private void CheckReady(Axis[] axes)
         {
             CheckConnected();
@@ -486,9 +476,16 @@ namespace ValidationStage.Devices
             {
                 AxisNo(axis);
             }
-            if (IsMoving)
+            Axis[] moving;
+            lock (_statusLock)
             {
-                throw new DeviceException(T("이동 중이라 명령을 보낼 수 없습니다", "Command is not ready (moving)"));
+                moving = _statuses.Where(status => status.IsMoving && axes.Contains(status.Axis))
+                    .Select(status => status.Axis).ToArray();
+            }
+            if (moving.Length > 0)
+            {
+                string names = string.Join(", ", moving);
+                throw new DeviceException(T($"{names} 축이 이동 중이라 명령을 보낼 수 없습니다", $"{names} is moving - command not accepted"));
             }
         }
 
