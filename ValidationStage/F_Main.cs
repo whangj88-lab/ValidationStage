@@ -24,7 +24,7 @@ namespace ValidationStage
         private bool _probeReading;
         private bool _probeReadInFlight;
         private readonly HashSet<string> _singleReadsInFlight = new HashSet<string>();
-        private F_Hexapod3D _hexapod3DForm;
+        private Hexapod3DForm _hexapod3DForm;
 
         // 연결 상태 표시를 바뀔 때만 갱신하려고 마지막 상태를 기억한다 ("연결 중..."/"연결 실패" 표시를 덮어쓰지 않게).
         private bool _stageConnected;
@@ -253,7 +253,7 @@ namespace ValidationStage
             }
             if (_hexapod3DForm == null || _hexapod3DForm.IsDisposed)
             {
-                _hexapod3DForm = new F_Hexapod3D(_system.Hexapod);
+                _hexapod3DForm = new Hexapod3DForm(_system.Hexapod);   // DLL 제공 3D 창
                 _hexapod3DForm.Show(this);
             }
             else

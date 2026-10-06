@@ -1,17 +1,15 @@
 ﻿using System;
 using System.Globalization;
-using System.IO;
 using System.Text;
 using System.Windows.Media.Media3D;
 
-namespace ValidationStage.View3D
+namespace ValidationStage.Devices.View3D
 {
     /// <summary>STL(바이너리/ASCII) → WPF MeshGeometry3D. 법선은 비워 두면 WPF 가 계산한다.</summary>
-    public static class StlReader
+    internal static class StlReader
     {
-        public static MeshGeometry3D Load(string path)
+        public static MeshGeometry3D Load(byte[] bytes)
         {
-            byte[] bytes = File.ReadAllBytes(path);
             var mesh = new MeshGeometry3D();
 
             // 바이너리 STL 도 헤더가 "solid" 로 시작할 수 있어서 크기로 판별한다: 84 + 50 * 삼각형 수.

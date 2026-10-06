@@ -82,6 +82,7 @@ fine in this project's x64 process — no bitness conflict with `PI_GCS2_DLL_x64
 | `MotorizedStage` | `Motion/MMT_Motion.cs` | MMT X/Y/Z (`Connect(host)`, axes fixed); added `GetAxisStatuses`, `SetSpeedLevel` |
 | `Probe` (+ `ProbeChannel`, `ProbeReadResult`) | `Probe/SolartronProbe.cs` | Orbit3; `Connected` → `IsConnected`; `Zero`/`ZeroAll` now return bool |
 | `Common.cs` | `Motion/AxisStatus.cs` | `Axis` (dropped unused `ALL`), `AxisStatus`, `SpeedLevel`, `DeviceError`, `LogEntry`, `Messages`/`Language`, internal `LogBuffer`/`DeviceErrors`/`DeviceException` |
+| `View3D/Hexapod3DForm` (+ internal `HexapodGeometry`, `HexapodScene`, `StlReader`) + `PIHexapodData/` | exe's `F_Hexapod3D` + `View3D/` (moved 2026-10-07) | Public 3D view window; H-811.I2 model data embedded as resources |
 | `PI_GCS2.cs` | `Motion/PI_GCS2.cs` (git mv) | PI P/Invoke, now `internal`. File is **CP949-encoded** — edit with ASCII only (sed), never add Korean text |
 
 Every device: public methods catch everything → `false`/`null`, record `LastError` and a log line (`DeviceErrors.Fail`).
@@ -207,11 +208,21 @@ Scope: **list + create + activate + delete** — Save/Reset is present but disab
   Refused while moving. Rendered against the real hexapod (read-only) and screenshot-checked; create/activate not
   yet run on hardware. Defined CSs may not survive a controller power cycle unless saved (Save/Reset not implemented).
 
-**Hexapod 3D view, added 2026-10-02:** [3D 보기] in the hexapod connection row (after [좌표계]) opens the non-modal
-`F_Hexapod3D` (single instance, `_hexapod3DForm`), a look-alike of PIMikroMove's 3D hexapod view (user's
-screenshot). **Not provided by the GCS2 DLL** — built here with WPF 3D (`Viewport3D` in an `ElementHost`; references
-PresentationCore/PresentationFramework/WindowsBase/WindowsFormsIntegration/System.Xaml; no NuGet). Code in `View3D/`:
-- Model data comes from PI's own install, `C:\ProgramData\PI\PIHexapodDataFiles\` (the same files PIMikroMove uses):
+**Hexapod 3D view, added 2026-10-02, moved into the DLL 2026-10-07:** [3D 보기] in the hexapod connection row (after
+[좌표계]) opens the non-modal **`ValidationStage.Devices.Hexapod3DForm`** (public, `new Hexapod3DForm(hexapod).Show()`;
+F_Main keeps a single instance in `_hexapod3DForm`), a look-alike of PIMikroMove's 3D hexapod view (user's
+screenshot). **Not provided by the GCS2 DLL** — built here with WPF 3D (`Viewport3D` in an `ElementHost`; the DLL
+references PresentationCore/PresentationFramework/WindowsBase/WindowsFormsIntegration/System.Xaml — all part of .NET
+Framework, nothing extra to deploy; no NuGet). Code in `ValidationStage.Devices/View3D/` (`HexapodGeometry`,
+`HexapodScene`, `StlReader` are `internal`; status texts go through `Messages.T`). The coordinate-system window
+(`F_CoordSystem`) deliberately stays in the sample exe (user decision 2026-10-07).
+- **Model data is embedded in the DLL** (user decision 2026-10-07: the files come with PI's installer, OK to ship):
+  `ValidationStage.Devices/PIHexapodData/` holds the 6 files H-811.I2 needs (~1.4 MB: `hexdata_H-811.I2.dat`,
+  `M811_CAD.ini`, 4 STLs), same relative layout as the PI folder, as `EmbeddedResource` with `LogicalName`
+  `PIHexapodData/<relative path>`. `HexapodDataFiles` reads `Embedded` first, then `Installed` (`C:\ProgramData\PI\
+  PIHexapodDataFiles`) for other models; `HexapodGeometry.DataSource` says which was used. STLs are now passed as
+  `byte[]` (`StlReader.Load(byte[])`). Verified 2026-10-07: offscreen render from the embedded data only looked right.
+- Model data originally comes from PI's own install, `C:\ProgramData\PI\PIHexapodDataFiles\` (the same files PIMikroMove uses):
   `HexdataCollisionData\hexdata_<model>.dat` (h0, base joints `b[1..3,1..6]` at z=−h0, platform joints
   `a0[1..3,1..6]` at z=0 — the "Base set"/"Platform set"; the file also has a second set `b[*,7..12]` that is not
   used) and `3D\*\*_CAD.ini` section `[<model>]` (STL file names + offsets). Model name = `CST?` (`H-811.I2_AXIS_X` →
@@ -222,7 +233,7 @@ PresentationCore/PresentationFramework/WindowsBase/WindowsFormsIntegration/Syste
   (base→platform); lower part origin at `B + dir·LowerOffset.Z` (27) with local X offset (−3.8), upper part origin
   at `A − dir·UpperOffset.Z` (29) — they overlap like a telescope. Strut roll (twist about its axis) is chosen so local
   +X points radially outward — **not verified** against PIMikroMove.
-- Pose: `qPOS X..W` is in the active CS, so `F_Hexapod3D` converts with `KLT? <active> ZERO`:
+- Pose: `qPOS X..W` is in the active CS, so `Hexapod3DForm` converts with `KLT? <active> ZERO`:
   `P_zero = K·P_active·K⁻¹` (row-vector `Matrix3D`: `K⁻¹·P·K`). Measured: active CS was **TILTEDCS (KSD) = ZERO
   rotated U=180°** (that's why PIMikroMove's KSD axis labels look mirrored). Rotation order assumed fixed-axis U→V→W
   (`Rotate X, Y, Z` appended). Correct at the home pose; not yet compared against PIMikroMove with a real tilt. The

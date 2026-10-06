@@ -1,9 +1,10 @@
-﻿namespace ValidationStage
+﻿namespace ValidationStage.Devices
 {
-    partial class F_Hexapod3D
+    partial class Hexapod3DForm
     {
         private System.ComponentModel.IContainer components = null;
 
+        /// <summary>사용 중인 리소스를 정리한다.</summary>
         protected override void Dispose(bool disposing)
         {
             if (disposing && (components != null))
@@ -49,7 +50,7 @@
             this._timer.Interval = 100;
             this._timer.Tick += new System.EventHandler(this.Timer_Tick);
             //
-            // F_Hexapod3D
+            // Hexapod3DForm
             //
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
@@ -57,11 +58,11 @@
             this.Controls.Add(this._host);
             this.Controls.Add(this._statusLabel);
             this.Font = new System.Drawing.Font("맑은 고딕", 9F);
-            this.Name = "F_Hexapod3D";
+            this.Name = "Hexapod3DForm";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
             this.Text = "헥사포드 3D 보기";
-            this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(this.F_Hexapod3D_FormClosing);
-            this.Load += new System.EventHandler(this.F_Hexapod3D_Load);
+            this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(this.Hexapod3DForm_FormClosing);
+            this.Load += new System.EventHandler(this.Hexapod3DForm_Load);
             this.ResumeLayout(false);
         }
 

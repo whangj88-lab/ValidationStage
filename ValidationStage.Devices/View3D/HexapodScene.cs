@@ -5,7 +5,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Media3D;
 
-namespace ValidationStage.View3D
+namespace ValidationStage.Devices.View3D
 {
     /// <summary>
     /// 헥사포드 3D 장면 (WPF Viewport3D). F_Hexapod3D 가 ElementHost 로 띄운다.
@@ -14,7 +14,7 @@ namespace ValidationStage.View3D
     ///   아래 조각은 원점을 B + dir*LowerOffset.Z, 위 조각은 A - dir*UpperOffset.Z 에 둔다 (CAD ini 의 offset).
     /// 마우스: 왼쪽 드래그 = 회전, 휠 = 확대/축소, 더블클릭 = 시점 초기화.
     /// </summary>
-    public class HexapodScene
+    internal class HexapodScene
     {
         public FrameworkElement View => _root;
 

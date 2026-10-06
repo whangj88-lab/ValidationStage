@@ -1,20 +1,23 @@
-﻿using ValidationStage.Devices;
 using System;
-using System.Globalization;
 using System.Linq;
 using System.Windows.Forms;
 using System.Windows.Media.Media3D;
-using ValidationStage.View3D;
+using ValidationStage.Devices.View3D;
+using static ValidationStage.Devices.Messages;
 
-namespace ValidationStage
+namespace ValidationStage.Devices
 {
     /// <summary>
-    /// 헥사포드 3D 보기 창 - PIMikroMove 의 3D 보기를 본떠 PI 모델 자료(STL + hexdata)로 그린다 (HexapodScene).
-    /// 비모달 창이라 띄워 둔 채로 조그/이동하면 100 ms 마다 자세가 갱신된다.
+    /// 헥사포드 3D 보기 창 - PIMikroMove 의 3D 보기를 본떠 PI 모델 자료(STL + hexdata)로 그린다.
+    /// 비모달로 띄워 두면(<c>Show()</c>) 100 ms 마다 헥사포드 자세를 읽어 갱신한다. 마우스: 드래그 회전, 휠 확대, 더블클릭 초기화.
+    /// 형상 자료는 DLL 에 포함된 H-811.I2 를 쓰고, 다른 모델이면 PI 설치 폴더(C:\ProgramData\PI\PIHexapodDataFiles)에서 찾는다.
+    /// </summary>
+    /// <example><code>new Hexapod3DForm(system.Hexapod).Show(this);</code></example>
+    /// <remarks>
     /// 자세 계산: qPOS 는 활성 좌표계 기준 값이라, KLT?(활성 → ZERO) 변환 K 로 ZERO 기준 상판 자세로 바꾼다.
     ///   P_zero = K · P_active · K⁻¹  (행 벡터 규약에서는 K⁻¹ · P · K). 예: TILTEDCS(U=180) 활성 + 위치 0 → 상판은 기준 자세.
-    /// </summary>
-    public partial class F_Hexapod3D : Form
+    /// </remarks>
+    public partial class Hexapod3DForm : Form
     {
         private const int CoordSystemRefreshTicks = 10;   // 활성 좌표계/변환은 1초마다 다시 읽는다
 
@@ -25,18 +28,20 @@ namespace ValidationStage
         private Matrix3D _csToZero = Matrix3D.Identity;   // 활성 좌표계 → ZERO (행 벡터 규약)
         private int _tick;
 
-        public F_Hexapod3D(Hexapod hexapod)
+        /// <summary>3D 창을 만든다. 헥사포드가 연결된 상태에서 띄운다 (모델 이름을 컨트롤러에서 읽음).</summary>
+        public Hexapod3DForm(Hexapod hexapod)
         {
             InitializeComponent();
             _hexapod = hexapod;
+            Text = T("헥사포드 3D 보기", "Hexapod 3D View");
         }
 
-        private void F_Hexapod3D_Load(object sender, EventArgs e)
+        private void Hexapod3DForm_Load(object sender, EventArgs e)
         {
             _model = _hexapod.GetModelName();
             if (_model == null)
             {
-                _statusLabel.Text = "헥사포드 모델을 읽지 못했습니다 (연결 상태 확인)";
+                _statusLabel.Text = T("헥사포드 모델을 읽지 못했습니다 (연결 상태 확인)", "Failed to read the hexapod model (check the connection)");
                 return;
             }
             try
@@ -44,22 +49,22 @@ namespace ValidationStage
                 var geometry = HexapodGeometry.Load(_model);
                 _scene = new HexapodScene(geometry);
                 _host.Child = _scene.View;
-                Text = $"헥사포드 3D 보기 - {_model}";
+                Text = T($"헥사포드 3D 보기 - {_model}", $"Hexapod 3D View - {_model}");
                 if (geometry.PlatformStl == null || geometry.LowerStrutStl == null)
                 {
-                    _statusLabel.Text = $"{_model}: 3D 형상(STL)이 없어 단순 형상으로 표시합니다";
+                    _statusLabel.Text = T($"{_model}: 3D 형상(STL)이 없어 단순 형상으로 표시합니다", $"{_model}: no 3D shapes (STL) - showing a simple shape");
                 }
             }
             catch (Exception ex)
             {
-                _statusLabel.Text = $"{_model} 형상 자료를 읽지 못했습니다: {ex.Message}";
+                _statusLabel.Text = T($"{_model} 형상 자료를 읽지 못했습니다: {ex.Message}", $"Failed to read {_model} geometry: {ex.Message}");
                 return;
             }
             _tick = 0;
             _timer.Start();
         }
 
-        private void F_Hexapod3D_FormClosing(object sender, FormClosingEventArgs e)
+        private void Hexapod3DForm_FormClosing(object sender, FormClosingEventArgs e)
         {
             _timer.Stop();
         }
@@ -72,7 +77,7 @@ namespace ValidationStage
             }
             if (!_hexapod.IsConnected)
             {
-                _statusLabel.Text = $"{_model} | 헥사포드 연결 안됨 - 마지막 자세를 표시 중";
+                _statusLabel.Text = T($"{_model} | 헥사포드 연결 안됨 - 마지막 자세를 표시 중", $"{_model} | hexapod not connected - showing the last pose");
                 return;
             }
 
@@ -94,7 +99,8 @@ namespace ValidationStage
 
             string values = string.Join("  ", new[] { "X", "Y", "Z" }.Select((a, i) => $"{a} {pose[i]:0.000}"))
                 + " mm   " + string.Join("  ", new[] { "U", "V", "W" }.Select((a, i) => $"{a} {pose[i + 3]:0.000}")) + " deg";
-            _statusLabel.Text = $"{_model} | 좌표계 {_activeCs}: {values} | 드래그 회전 · 휠 확대 · 더블클릭 초기화";
+            _statusLabel.Text = T($"{_model} | 좌표계 {_activeCs}: {values} | 드래그 회전 · 휠 확대 · 더블클릭 초기화",
+                $"{_model} | CS {_activeCs}: {values} | drag rotate · wheel zoom · double-click reset");
         }
 
         private void RefreshCoordSystem()
