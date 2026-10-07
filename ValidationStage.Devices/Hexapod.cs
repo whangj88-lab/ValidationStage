@@ -657,7 +657,7 @@ namespace ValidationStage.Devices
         #region 좌표계 관리 (PIMikroMove "Manage Coordinate Systems" 의 목록/생성/연결/삭제/활성화)
 
         // 값은 컨트롤러 그대로 X,Y,Z = mm, U,V,W = deg (PI 화면과 동일). 메인 축 값 arcmin(= deg × −60) 과 섞지 않는다.
-        // 활성화(KEN)는 플랫폼을 움직이지 않고 좌표 기준만 바꾼다 - 이후 위치 값과 저장된 헥사포드 원점의 의미가 달라진다.
+        // 활성화(KEN)는 플랫폼을 움직이지 않고 좌표 기준만 바꾼다 - 이후 위치 값과 0 위치(원점)의 의미가 달라진다.
 
         /// <summary>
         /// 정의된 좌표계 목록 (KLS? + KEN?). PI 내부 좌표계(PI_BASE, PI_LEVELLING 등)도 포함되므로 화면에서는

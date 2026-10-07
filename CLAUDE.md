@@ -129,7 +129,7 @@ the old stage comes back — it would need porting to the DLL's style).
   (`ma0`, `d0`, `g`), verified on hardware to return Ready with no position change. `WaitForStopAsync` also treats
   "busy but position unchanged for 3 s" as stuck and clears it the same way.
 - **Stage home = the controller's own coordinates** (user request 2026-09-30, replacing the file-saved `StageHome.txt`
-  approach; the hexapod still uses `HexapodHome.txt`). Buttons: [기계 원점 찾기] → `HomeAsync` = `hm0` on X,Y,Z
+  approach). Buttons: [기계 원점 찾기] → `HomeAsync` = `hm0` on X,Y,Z
   (toward the − limit; confirm dialog first), [현재 위치를 원점으로] → `SetZero` = `p0`, [원점으로 이동] → absolute
   move to 0. Controller-stored homing speeds were 10 mm/s (HMV 512000), so `HomeAsync` first sets HMV to the 중속
   value (HMA/HMAD ×10, HMVF ÷10; write-if-different). Position counters restart at 0 on controller power-up, so run
@@ -203,7 +203,7 @@ Scope: **list + create + activate + delete** — Save/Reset is present but disab
   "no visible CS active ⇒ ZERO is active". `KLN?`: `ZERO=PI_BASE PI_LEVELLING HEXAPOD`.
 - [+] → editable Name/Type(KSD/KST/KSW)/Position → [Set Coord. Sys.] (`Hexapod.DefineCoordSystem`). Selecting an existing
   inactive KSD/KST/KSW lets you edit and re-Set it; ZERO, `(PI)` and active ones are read-only. Name `[A-Za-z0-9_]+`.
-  [Activate CS] = `KEN` with a confirm (platform doesn't move, but positions and the saved `HexapodHome.txt` meaning
+  [Activate CS] = `KEN` with a confirm (platform doesn't move, but positions and the 0 that [원점으로 이동] goes to
   change). Values are **controller-native mm/deg with no sign flip** — unlike the main screen's arcmin (= deg × −60).
   Refused while moving. Rendered against the real hexapod (read-only) and screenshot-checked; create/activate not
   yet run on hardware. Defined CSs may not survive a controller power cycle unless saved (Save/Reset not implemented).
@@ -293,7 +293,7 @@ in software rather than wired 1:1 to COM ports. `Probe` therefore:
   column, saved on `CellEndEdit`.
 - **All settings files live in the exe folder** (`AppDomain.CurrentDomain.BaseDirectory`, fixed 2026-09-30 — they
   used to be relative to the working directory, so a shortcut with a different "Start in" lost them):
-  `ProbeLabels.txt`, `StageHost.txt`, `HexapodHost.txt`, `HexapodHome.txt`.
+  `ProbeLabels.txt`, `StageHost.txt`, `HexapodHost.txt`.
 - DP10/DP20/DP2 are **probe stroke-range variants** (2/10/20 mm), not different protocols — confirmed by reading
   `503094 - DP_LE_AGM Manual.pdf` in the Support Pack. The SDK's `OrbitModuleDP`/`OrbitModule` classes handle all of
   them identically; there is no DP10-specific vs DP20-specific code anywhere in this project, and there shouldn't
@@ -342,11 +342,13 @@ Thin facade, not a big abstraction: owns one `MotorizedStage`, one `Hexapod` and
 (`MoveAbsAsync`/`JogRun`/`JogStop`/`StopAxisAsync`) and the shared speed-level and stop-both-devices logic described above.
 Also owns per-axis absolute move (`MoveAbsAsync`, machine coordinates) and **home (원점), split per device**.
 Stage: controller-native — `HomeStageAsync` (`hm0`), `SetStageZero` (`p0`), `MoveStageToZeroAsync` (see the MMT
-section above). Hexapod: `SetHexapodHomeFromCurrent`/`MoveHexapodHomeAsync` (TX,TY,TZ arcmin → `HexapodHome.txt`,
-in the exe folder like `ProbeLabels.txt`). The hexapod version mirrors A's `SetHome6DFormCurPos`/
-`MoveHome6D` (the tail end of A's `FindCSHorg`): nothing is written to the controller, home is just a saved target. One
-deliberate difference from A (user's choice): the hexapod home stores the **actual current TX/TY/TZ**, not forced 0 —
-A zeroes them because it corrects tilt via vision, which B doesn't have.
+section above). Hexapod: only `MoveHexapodToZeroAsync` (TX,TY,TZ → 0 in the active CS). **The hexapod "save current
+as home" feature (`SetHexapodHomeFromCurrent`/`MoveHexapodHomeAsync`/`HexapodHome.txt`, ported from A's
+`SetHome6DFormCurPos`/`MoveHome6D`) was removed 2026-10-07 (user decision):** it only remembered a pose, the display
+never became 0 (confusing next to the stage's `p0` button of the same name), absolute move covers it, and the saved
+value silently changed meaning when the active CS changed. A hexapod's origins are the controller's: mechanical =
+reference (`FRF`), coordinate = the active coordinate system (move it with KSD + KEN via [좌표계]). Don't re-add a
+file-saved home.
 Connect/save of `StageHost.txt`/`HexapodHost.txt` is here too (`ConnectStageAsync`, `ConnectHexapod`); the device
 classes themselves never touch settings files (except `Probe`'s `ProbeLabels.txt`). `F_Main` talks to
 `_system.Hexapod` / `_system.Probe` directly for device-only features (reference, scan, coord systems, probe).

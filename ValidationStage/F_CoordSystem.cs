@@ -358,8 +358,7 @@ namespace ValidationStage
                 return;
             }
             DialogResult answer = MessageBox.Show(
-                $"'{cs.Name}' 좌표계를 활성화합니다.\n헥사포드는 움직이지 않지만 표시 위치와 이동 기준이 바뀌고,\n" +
-                "저장된 헥사포드 원점은 이전 좌표계 기준 값이 됩니다. 계속할까요?",
+                $"'{cs.Name}' 좌표계를 활성화합니다.\n헥사포드는 움직이지 않지만 표시 위치와 이동 기준(0 위치 포함)이 바뀝니다. 계속할까요?",
                 "Activate CS", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning);
             if (answer != DialogResult.OK)
             {

@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -12,7 +11,7 @@ namespace ValidationStage.Devices
     /// Validation Stage 장비 전체 (Motorized Stage + Hexapod + Probe). 보통 이 클래스 하나만 만들어 쓴다.
     /// 제어 컨셉: X, Y, Z 는 <see cref="Stage"/>, TX, TY, TZ 는 <see cref="Hexapod"/> 가 담당하며, 축을 받는 함수는 자동으로 나눠 보낸다.
     /// 장비 전용 기능(좌표계, 프로브 스캔/읽기 등)은 <see cref="Stage"/>, <see cref="Hexapod"/>, <see cref="Probe"/> 를 직접 호출한다.
-    /// 연결 주소와 헥사포드 원점은 exe 폴더의 StageHost.txt, HexapodHost.txt, HexapodHome.txt 에 저장된다.
+    /// 연결 주소는 exe 폴더의 StageHost.txt, HexapodHost.txt 에 저장된다.
     /// </summary>
     public class ValidationSystem
     {
@@ -33,7 +32,6 @@ namespace ValidationStage.Devices
         // 설정 파일은 모두 exe 폴더에 둔다 (실행 위치/바로가기 시작 위치와 무관하게 같은 파일을 쓰도록).
         private static readonly string StageHostFile = SettingPath("StageHost.txt");
         private static readonly string HexapodHostFile = SettingPath("HexapodHost.txt");
-        private static readonly string HexapodHomeFile = SettingPath("HexapodHome.txt");
 
         /// <summary>마지막으로 연결에 성공한 스테이지 주소 (StageHost.txt). 저장된 적 없으면 컨트롤러 기본 IP "192.168.0.123".</summary>
         public string StageHost { get; private set; } = LoadConnectionSetting(StageHostFile, "192.168.0.123");
@@ -241,38 +239,15 @@ namespace ValidationStage.Devices
             return Track(await Stage.MoveAsync(MotorizedStage.Axes, new double[MotorizedStage.Axes.Length], true), Stage.LastError);
         }
 
-        // 헥사포드: 컨트롤러 좌표는 건드리지 않고 현재 TX,TY,TZ 를 파일에 저장해 두었다가 그 위치로 절대 이동한다.
+        // 헥사포드(PI): 원점은 컨트롤러가 정한다.
+        // - 기계 원점: 레퍼런스 (Hexapod.ReferenceAsync, FRF)
+        // - 좌표 원점: 활성 좌표계의 0 (옮기려면 Hexapod.DefineCoordSystem + ActivateCoordSystem)
+        // - 원점으로 이동: 활성 좌표계 기준 TX, TY, TZ = 0 으로 절대 이동
 
-        /// <summary>저장된 헥사포드 원점 TX, TY, TZ (arcmin, HexapodHome.txt). 저장된 적 없으면 null.</summary>
-        public double[] HexapodHome { get; private set; } = LoadHome(HexapodHomeFile);
-
-        /// <summary>헥사포드 현재 TX, TY, TZ 를 원점으로 저장한다 (HexapodHome.txt).</summary>
-        public bool SetHexapodHomeFromCurrent()
+        /// <summary>헥사포드 TX, TY, TZ 를 0 (활성 좌표계 기준)으로 이동한다. 헥사포드의 X, Y, Z 는 그대로 둔다.</summary>
+        public async Task<bool> MoveHexapodToZeroAsync()
         {
-            double[] positions = Hexapod.GetPositions();
-            if (positions == null)
-            {
-                LastError = Hexapod.LastError;
-                return false;
-            }
-            HexapodHome = positions;
-            if (!SaveHome(HexapodHomeFile, positions))
-            {
-                LastError = new DeviceError(0, T("원점 파일 저장 실패: ", "Failed to save home file: ") + HexapodHomeFile);
-                return false;
-            }
-            return true;
-        }
-
-        /// <summary>헥사포드를 저장된 원점으로 이동한다. 저장된 원점이 없으면 false.</summary>
-        public async Task<bool> MoveHexapodHomeAsync()
-        {
-            if (HexapodHome == null)
-            {
-                LastError = new DeviceError(0, T("저장된 헥사포드 원점이 없습니다", "No hexapod home saved"));
-                return false;
-            }
-            return Track(await Hexapod.MoveAsync(Hexapod.Axes, HexapodHome, true), Hexapod.LastError);
+            return Track(await Hexapod.MoveAsync(Hexapod.Axes, new double[Hexapod.Axes.Length], true), Hexapod.LastError);
         }
 
         #endregion
@@ -319,39 +294,6 @@ namespace ValidationStage.Devices
         private static void SaveConnectionSetting(string filePath, string value)
         {
             try { File.WriteAllText(filePath, value); } catch { }
-        }
-
-        private static double[] LoadHome(string filePath)
-        {
-            try
-            {
-                if (!File.Exists(filePath))
-                {
-                    return null;
-                }
-                double[] values = File.ReadAllLines(filePath)
-                    .Where(line => !string.IsNullOrWhiteSpace(line))
-                    .Select(line => double.Parse(line, CultureInfo.InvariantCulture))
-                    .ToArray();
-                return values.Length == 3 ? values : null;
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
-        private static bool SaveHome(string filePath, double[] positions)
-        {
-            try
-            {
-                File.WriteAllLines(filePath, positions.Select(p => p.ToString("R", CultureInfo.InvariantCulture)));
-                return true;
-            }
-            catch
-            {
-                return false;
-            }
         }
 
         #endregion

@@ -65,7 +65,6 @@ namespace ValidationStage
             BindStop(Axis.TY, _tyStopButton);
             BindStop(Axis.TZ, _tzStopButton);
 
-            UpdateHomeLabels();
             _stageHostBox.Text = _system.StageHost;
             _hexapodHostBox.Text = _system.HexapodHost;
             UpdateProbeButtons();
@@ -384,35 +383,10 @@ namespace ValidationStage
             _stageMoveHomeButton.Enabled = true;
         }
 
-        private void HexapodSetHomeButton_Click(object sender, EventArgs e)
-        {
-            DialogResult answer = MessageBox.Show(
-                "현재 TX, TY, TZ 위치를 헥사포드 원점으로 저장합니다.\n이전에 저장한 원점은 덮어씁니다. 계속하시겠습니까?",
-                "헥사포드 원점 저장", MessageBoxButtons.OKCancel, MessageBoxIcon.Question);
-            if (answer != DialogResult.OK)
-            {
-                return;
-            }
-            if (_system.SetHexapodHomeFromCurrent())
-            {
-                AppendLog("[Hexapod] 현재 위치를 원점으로 저장");
-            }
-            else
-            {
-                AppendLog("[Hexapod] 원점 저장 실패");
-            }
-            UpdateHomeLabels();
-        }
-
         private async void HexapodMoveHomeButton_Click(object sender, EventArgs e)
         {
-            if (_system.HexapodHome == null)
-            {
-                AppendLog("[Hexapod] 저장된 원점이 없습니다");
-                return;
-            }
             _hexapodMoveHomeButton.Enabled = false;
-            await _system.MoveHexapodHomeAsync();
+            await _system.MoveHexapodToZeroAsync();
             _hexapodMoveHomeButton.Enabled = true;
         }
 
@@ -814,20 +788,6 @@ namespace ValidationStage
                 row.Cells[_colLabel.Index].Value = ch.Label;
             }
             return row;
-        }
-
-        private void UpdateHomeLabels()
-        {
-            _hexapodHomeLabel.Text = FormatHome(_system.HexapodHome, Hexapod.Axes, "arcmin");
-        }
-
-        private static string FormatHome(double[] home, Axis[] axes, string unit)
-        {
-            if (home == null)
-            {
-                return "원점: 미설정";
-            }
-            return "원점: " + string.Join(", ", axes.Select((axis, i) => $"{axis} {home[i]:0.000}")) + " " + unit;
         }
 
         private void AppendLog(string message)

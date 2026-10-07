@@ -58,11 +58,9 @@
             this._tzStopButton = new System.Windows.Forms.Button();
             this._hexapodHomeRow = new System.Windows.Forms.FlowLayoutPanel();
             this._hexapodReferenceButton = new System.Windows.Forms.Button();
-            this._hexapodSetHomeButton = new System.Windows.Forms.Button();
             this._hexapodMoveHomeButton = new System.Windows.Forms.Button();
             this._hexapodCoordSystemButton = new System.Windows.Forms.Button();
             this._hexapod3DButton = new System.Windows.Forms.Button();
-            this._hexapodHomeLabel = new System.Windows.Forms.Label();
             this._hexapodConnRow = new System.Windows.Forms.FlowLayoutPanel();
             this._hexapodHostLabel = new System.Windows.Forms.Label();
             this._hexapodHostBox = new System.Windows.Forms.TextBox();
@@ -508,9 +506,7 @@
             // _hexapodHomeRow
             // 
             this._hexapodHomeRow.Controls.Add(this._hexapodReferenceButton);
-            this._hexapodHomeRow.Controls.Add(this._hexapodSetHomeButton);
             this._hexapodHomeRow.Controls.Add(this._hexapodMoveHomeButton);
-            this._hexapodHomeRow.Controls.Add(this._hexapodHomeLabel);
             this._hexapodHomeRow.Dock = System.Windows.Forms.DockStyle.Bottom;
             this._hexapodHomeRow.Location = new System.Drawing.Point(3, 261);
             this._hexapodHomeRow.Name = "_hexapodHomeRow";
@@ -527,23 +523,13 @@
             this._hexapodReferenceButton.Text = "레퍼런스";
             this._hexapodReferenceButton.UseVisualStyleBackColor = true;
             this._hexapodReferenceButton.Click += new System.EventHandler(this.HexapodReferenceButton_Click);
-            //
-            // _hexapodSetHomeButton
-            //
-            this._hexapodSetHomeButton.Location = new System.Drawing.Point(95, 9);
-            this._hexapodSetHomeButton.Name = "_hexapodSetHomeButton";
-            this._hexapodSetHomeButton.Size = new System.Drawing.Size(150, 23);
-            this._hexapodSetHomeButton.TabIndex = 1;
-            this._hexapodSetHomeButton.Text = "현재 위치를 원점으로";
-            this._hexapodSetHomeButton.UseVisualStyleBackColor = true;
-            this._hexapodSetHomeButton.Click += new System.EventHandler(this.HexapodSetHomeButton_Click);
             // 
             // _hexapodMoveHomeButton
             // 
-            this._hexapodMoveHomeButton.Location = new System.Drawing.Point(251, 9);
+            this._hexapodMoveHomeButton.Location = new System.Drawing.Point(95, 9);
             this._hexapodMoveHomeButton.Name = "_hexapodMoveHomeButton";
             this._hexapodMoveHomeButton.Size = new System.Drawing.Size(110, 23);
-            this._hexapodMoveHomeButton.TabIndex = 2;
+            this._hexapodMoveHomeButton.TabIndex = 1;
             this._hexapodMoveHomeButton.Text = "원점으로 이동";
             this._hexapodMoveHomeButton.UseVisualStyleBackColor = true;
             this._hexapodMoveHomeButton.Click += new System.EventHandler(this.HexapodMoveHomeButton_Click);
@@ -567,17 +553,6 @@
             this._hexapod3DButton.Text = "3D 보기";
             this._hexapod3DButton.UseVisualStyleBackColor = true;
             this._hexapod3DButton.Click += new System.EventHandler(this.Hexapod3DButton_Click);
-            // 
-            // _hexapodHomeLabel
-            // 
-            this._hexapodHomeLabel.AutoSize = true;
-            this._hexapodHomeLabel.ForeColor = System.Drawing.Color.Gray;
-            this._hexapodHomeLabel.Location = new System.Drawing.Point(367, 6);
-            this._hexapodHomeLabel.Name = "_hexapodHomeLabel";
-            this._hexapodHomeLabel.Padding = new System.Windows.Forms.Padding(8, 6, 0, 0);
-            this._hexapodHomeLabel.Size = new System.Drawing.Size(82, 21);
-            this._hexapodHomeLabel.TabIndex = 3;
-            this._hexapodHomeLabel.Text = "원점: 미설정";
             // 
             // _hexapodConnRow
             // 
@@ -1483,10 +1458,8 @@
         private System.Windows.Forms.Button _stageMoveHomeButton;
         private System.Windows.Forms.FlowLayoutPanel _hexapodHomeRow;
         private System.Windows.Forms.Button _hexapodReferenceButton;
-        private System.Windows.Forms.Button _hexapodSetHomeButton;
         private System.Windows.Forms.Button _hexapodMoveHomeButton;
         private System.Windows.Forms.Button _hexapodCoordSystemButton;
         private System.Windows.Forms.Button _hexapod3DButton;
-        private System.Windows.Forms.Label _hexapodHomeLabel;
     }
 }
