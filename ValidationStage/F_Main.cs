@@ -360,6 +360,13 @@ namespace ValidationStage
 
         private void StageSetHomeButton_Click(object sender, EventArgs e)
         {
+            DialogResult answer = MessageBox.Show(
+                "현재 X, Y, Z 위치를 원점(0)으로 설정합니다.\n이전 원점 기준 위치는 사라집니다. 계속하시겠습니까?",
+                "스테이지 원점 설정", MessageBoxButtons.OKCancel, MessageBoxIcon.Question);
+            if (answer != DialogResult.OK)
+            {
+                return;
+            }
             if (_system.SetStageZero())
             {
                 AppendLog("[Stage] 현재 위치를 원점(0)으로 설정");
@@ -379,6 +386,13 @@ namespace ValidationStage
 
         private void HexapodSetHomeButton_Click(object sender, EventArgs e)
         {
+            DialogResult answer = MessageBox.Show(
+                "현재 TX, TY, TZ 위치를 헥사포드 원점으로 저장합니다.\n이전에 저장한 원점은 덮어씁니다. 계속하시겠습니까?",
+                "헥사포드 원점 저장", MessageBoxButtons.OKCancel, MessageBoxIcon.Question);
+            if (answer != DialogResult.OK)
+            {
+                return;
+            }
             if (_system.SetHexapodHomeFromCurrent())
             {
                 AppendLog("[Hexapod] 현재 위치를 원점으로 저장");
