@@ -26,11 +26,9 @@ Sample\                      사용 예제 프로그램 소스 (WinForms)
   (메일/인터넷으로 받은 zip 을 그대로 풀면 Windows 가 파일마다 차단 표시를 붙여,
    예제 빌드 시 F_Main.resx 오류(MSB3821)가 납니다)
 - .NET Framework 4.8
-- 프로그램 플랫폼은 반드시 x64 (PI_GCS2_DLL_x64.dll 이 64비트 전용입니다. AnyCPU 의 "32비트 선호"도 끄십시오)
+- 프로그램 플랫폼은 반드시 x64 (PI_GCS2_DLL_x64.dll 이 64비트 전용입니다)
 - Motorized Stage: PC 랜 카드를 192.168.0.x 대역으로 설정 (컨트롤러 기본 주소 192.168.0.123:5001)
 - Hexapod: 컨트롤러와 같은 네트워크 대역 (주소를 모르면 Hexapod.ScanControllersAsync 로 검색)
-- 프로브: USB 컨트롤러(USBIM)를 쓰는 PC 에는 FTDI 드라이버가 필요합니다
-  (Solartron "Orbit3 Support Pack for Windows" 설치 시 함께 설치됨)
 
 
 3. 프로젝트에 추가하는 방법

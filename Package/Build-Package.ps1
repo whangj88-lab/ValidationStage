@@ -1,6 +1,6 @@
 ﻿# 업체 배포본을 만든다: Release x64 빌드 -> dist\ValidationStage_SDK_v<버전>\ (Bin + Sample + README) -> 검증 빌드 -> zip
 # 실행: powershell -ExecutionPolicy Bypass -File Package\Build-Package.ps1
-# 버전은 ValidationStage.Devices\Properties\AssemblyInfo.cs 의 AssemblyVersion 앞 세 자리를 쓴다 (배포 전에 올릴 것).
+# 버전은 ValidationStage.Devices\Properties\AssemblyInfo.cs 의 AssemblyVersion 네 자리(예: 1.0.0.0)를 그대로 쓴다 (배포 전에 올릴 것).
 
 $ErrorActionPreference = 'Stop'
 
@@ -49,7 +49,7 @@ Invoke-Build $msbuild (Join-Path $root 'ValidationStage.sln')
 
 $devicesOut = Join-Path $root 'ValidationStage.Devices\bin\x64\Release'
 $v = [Reflection.AssemblyName]::GetAssemblyName((Join-Path $devicesOut 'ValidationStage.Devices.dll')).Version
-$version = '{0}.{1}.{2}' -f $v.Major, $v.Minor, $v.Build
+$version = $v.ToString()
 $packageName = "ValidationStage_SDK_v$version"
 $packageDir = Join-Path $distDir $packageName
 $zipPath = Join-Path $distDir "$packageName.zip"

@@ -131,7 +131,7 @@ namespace ValidationStage
         {
             if (_system.Stage.IsConnected)
             {
-                AppendLog("[Stage] 이미 연결되어 있습니다");
+                AppendLog(L("[Stage] 이미 연결되어 있습니다", "[Stage] Already connected"));
                 return;
             }
 
@@ -169,7 +169,7 @@ namespace ValidationStage
             // 컨트롤러 전원을 켤 때마다 레퍼런스가 풀린다. 안 잡혀 있으면 이동(조그/절대이동/원점이동)이 모두 거부된다.
             if (_system.Hexapod.IsReferenced() == false)
             {
-                AppendLog("[Hexapod] 레퍼런스가 잡혀 있지 않습니다 - [레퍼런스]를 눌러야 이동할 수 있습니다");
+                AppendLog(L("[Hexapod] 레퍼런스가 잡혀 있지 않습니다 - [레퍼런스]를 눌러야 이동할 수 있습니다", "[Hexapod] Not referenced - press [레퍼런스] (Reference) before moving"));
                 await RunHexapodReferenceAsync();
             }
         }
@@ -181,7 +181,7 @@ namespace ValidationStage
         private async void HexapodScanButton_Click(object sender, EventArgs e)
         {
             _hexapodScanButton.Enabled = false;
-            AppendLog("[Hexapod] 컨트롤러 검색 중...");
+            AppendLog(L("[Hexapod] 컨트롤러 검색 중...", "[Hexapod] Searching for controllers..."));
             string[] found = await _system.Hexapod.ScanControllersAsync();
             _hexapodScanButton.Enabled = true;
             if (found == null)
@@ -191,12 +191,12 @@ namespace ValidationStage
 
             if (found.Length == 0)
             {
-                AppendLog("[Hexapod] 컨트롤러를 찾지 못했습니다 (PC 네트워크 대역/케이블/방화벽 확인)");
+                AppendLog(L("[Hexapod] 컨트롤러를 찾지 못했습니다 (PC 네트워크 대역/케이블/방화벽 확인)", "[Hexapod] No controller found (check the PC subnet, cable and firewall)"));
                 return;
             }
             foreach (string description in found)
             {
-                AppendLog("[Hexapod] 발견: " + description);
+                AppendLog(L("[Hexapod] 발견: ", "[Hexapod] Found: ") + description);
             }
             if (found.Length == 1)
             {
@@ -217,23 +217,23 @@ namespace ValidationStage
             string host = Hexapod.ParseHostFromDescription(description, out int port);
             if (host == null)
             {
-                AppendLog("[Hexapod] 검색 결과에서 IP 를 찾지 못했습니다: " + description);
+                AppendLog(L("[Hexapod] 검색 결과에서 IP 를 찾지 못했습니다: ", "[Hexapod] No IP found in the search result: ") + description);
                 return;
             }
             // 헥사포드는 포트 50000 고정으로 접속한다.
             if (port != Hexapod.Port)
             {
-                AppendLog($"[Hexapod] 주의: 포트가 {port} 입니다 - 이 프로그램은 {Hexapod.Port} 으로만 접속합니다");
+                AppendLog(L($"[Hexapod] 주의: 포트가 {port} 입니다 - 이 프로그램은 {Hexapod.Port} 으로만 접속합니다", $"[Hexapod] Warning: port is {port} - this program connects on {Hexapod.Port} only"));
             }
             _hexapodHostBox.Text = host;
-            AppendLog($"[Hexapod] IP {host} 선택 - [연결]을 누르세요");
+            AppendLog(L($"[Hexapod] IP {host} 선택 - [연결]을 누르세요", $"[Hexapod] IP {host} selected - press [연결] (Connect)"));
         }
 
         private void HexapodCoordSystemButton_Click(object sender, EventArgs e)
         {
             if (!_system.Hexapod.IsConnected)
             {
-                AppendLog("[Hexapod] 먼저 [연결]하세요");
+                AppendLog(L("[Hexapod] 먼저 [연결]하세요", "[Hexapod] Connect first"));
                 return;
             }
             using (var form = new F_CoordSystem(_system, AppendLog))
@@ -247,7 +247,7 @@ namespace ValidationStage
         {
             if (!_system.Hexapod.IsConnected)
             {
-                AppendLog("[Hexapod] 먼저 [연결]하세요");
+                AppendLog(L("[Hexapod] 먼저 [연결]하세요", "[Hexapod] Connect first"));
                 return;
             }
             if (_hexapod3DForm == null || _hexapod3DForm.IsDisposed)
@@ -271,7 +271,7 @@ namespace ValidationStage
         {
             if (!_system.Hexapod.IsConnected)
             {
-                AppendLog("[Hexapod] 먼저 [연결]하세요");
+                AppendLog(L("[Hexapod] 먼저 [연결]하세요", "[Hexapod] Connect first"));
                 return;
             }
             DialogResult answer = MessageBox.Show(
@@ -292,10 +292,10 @@ namespace ValidationStage
             }
             try
             {
-                AppendLog("[Hexapod] 레퍼런스 잡는 중...");
+                AppendLog(L("[Hexapod] 레퍼런스 잡는 중...", "[Hexapod] Referencing..."));
                 if (await _system.Hexapod.ReferenceAsync())
                 {
-                    AppendLog("[Hexapod] 레퍼런스 완료");
+                    AppendLog(L("[Hexapod] 레퍼런스 완료", "[Hexapod] Referencing done"));
                 }
             }
             finally
@@ -332,7 +332,7 @@ namespace ValidationStage
         private void ApplySpeed(int level)
         {
             string result = _system.SetSpeedLevel((SpeedLevel)level);
-            AppendLog($"속도: {_speedCombo.Items[level]} ({result})");
+            AppendLog(L($"속도: {_speedCombo.Items[level]} ({result})", $"Speed: {(SpeedLevel)level} ({result})"));
         }
 
         private void HexapodDisconnectButton_Click(object sender, EventArgs e)
@@ -352,7 +352,7 @@ namespace ValidationStage
             _stageFindHomeButton.Enabled = false;
             if (await _system.HomeStageAsync())
             {
-                AppendLog("[Stage] 기계 원점 찾기 완료");
+                AppendLog(L("[Stage] 기계 원점 찾기 완료", "[Stage] Homing done"));
             }
             _stageFindHomeButton.Enabled = true;
         }
@@ -368,11 +368,11 @@ namespace ValidationStage
             }
             if (_system.SetStageZero())
             {
-                AppendLog("[Stage] 현재 위치를 원점(0)으로 설정");
+                AppendLog(L("[Stage] 현재 위치를 원점(0)으로 설정", "[Stage] Current position set as origin (0)"));
             }
             else
             {
-                AppendLog("[Stage] 원점 설정 실패");
+                AppendLog(L("[Stage] 원점 설정 실패", "[Stage] Failed to set origin"));
             }
         }
 
@@ -404,7 +404,7 @@ namespace ValidationStage
         {
             if (_system.Probe.IsConnected)
             {
-                AppendLog("[Probe] 이미 연결되어 있습니다");
+                AppendLog(L("[Probe] 이미 연결되어 있습니다", "[Probe] Already connected"));
                 return;
             }
 
@@ -458,16 +458,16 @@ namespace ValidationStage
             if (_probeReading)
             {
                 StopProbeReading("읽기 중지");
-                AppendLog("[Probe] 읽기 중지");
+                AppendLog(L("[Probe] 읽기 중지", "[Probe] Reading stopped"));
                 return;
             }
             if (!_system.Probe.IsConnected)
             {
-                AppendLog("[Probe] 먼저 [연결]하세요");
+                AppendLog(L("[Probe] 먼저 [연결]하세요", "[Probe] Connect first"));
                 return;
             }
             StartProbeReading();
-            AppendLog("[Probe] 읽기 시작");
+            AppendLog(L("[Probe] 읽기 시작", "[Probe] Reading started"));
         }
 
         private void StartProbeReading()
@@ -595,7 +595,7 @@ namespace ValidationStage
             row.Cells[_colState.Index].Style.ForeColor = ch.IsError ? Color.Red : Color.Black;
             if (ch.IsError)
             {
-                AppendLog($"[Probe] {ch.Label} 읽기 실패: {ch.ErrorMessage}");
+                AppendLog(L($"[Probe] {ch.Label} 읽기 실패: {ch.ErrorMessage}", $"[Probe] {ch.Label} read failed: {ch.ErrorMessage}"));
             }
         }
 
@@ -719,9 +719,9 @@ namespace ValidationStage
                 StopProbeReading("통신 오류로 읽기 중지");
                 foreach (var ch in channels.Where(ch => ch.IsError))
                 {
-                    AppendLog($"[Probe] {ch.Label} 통신 오류: {ch.ErrorMessage}");
+                    AppendLog(L($"[Probe] {ch.Label} 통신 오류: {ch.ErrorMessage}", $"[Probe] {ch.Label} communication error: {ch.ErrorMessage}"));
                 }
-                AppendLog("[Probe] 읽기를 중지했습니다. 케이블 연결을 확인한 뒤 [읽기 시작]을 누르세요.");
+                AppendLog(L("[Probe] 읽기를 중지했습니다. 케이블 연결을 확인한 뒤 [읽기 시작]을 누르세요.", "[Probe] Reading stopped. Check the cable, then press [읽기 시작] (Start reading)."));
             }
         }
 
@@ -788,6 +788,15 @@ namespace ValidationStage
                 row.Cells[_colLabel.Index].Value = ch.Label;
             }
             return row;
+        }
+
+        /// <summary>
+        /// 샘플이 남기는 로그 문구도 DLL 메시지와 같은 언어(Messages.Language)로 쓴다.
+        /// 화면 문구(버튼, 라벨, 확인 창)는 한글 UI 그대로 둔다.
+        /// </summary>
+        private static string L(string korean, string english)
+        {
+            return Messages.Language == Language.English ? english : korean;
         }
 
         private void AppendLog(string message)

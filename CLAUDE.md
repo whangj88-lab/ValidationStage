@@ -62,10 +62,10 @@ No tests, no CI, no lint — same as A.
 
 Double-click `Package\Build-Package.bat` (ASCII-only, CRLF; pauses, opens `dist\` on success) or run
 `powershell -ExecutionPolicy Bypass -File Package\Build-Package.ps1` → Release x64 rebuild →
-`dist\ValidationStage_SDK_v<x.y.z>\` (`Bin\` = the 5 deliverable files, `Sample\` = sample exe **source** + a generated
+`dist\ValidationStage_SDK_v<w.x.y.z>\` (`Bin\` = the 5 deliverable files, `Sample\` = sample exe **source** + a generated
 sample-only `ValidationStage.sln`, `README.txt` from `Package\README.txt` with `{VERSION}`) → copies it to %TEMP% and
 builds the sample there alone (same conditions as the vendor: no DLL source) → zip. `dist/` is git-ignored. Version =
-`ValidationStage.Devices` `AssemblyVersion` (first 3 parts) — bump it before each release. The DLL ships as binary only. Shipping the PI/Solartron DLLs to the vendor is
+`ValidationStage.Devices` `AssemblyVersion` (all 4 parts, e.g. `v1.0.0.0`) — bump it before each release. The DLL ships as binary only. Shipping the PI/Solartron DLLs to the vendor is
 OK (user confirmed 2026-10-08). No `.pdb` in the package (user decision).
 - The sample csproj builds both ways: if `..\ValidationStage.Devices\*.csproj` exists → `ProjectReference` + PI DLL from
   `..\PIDll\`; otherwise → file reference `..\..\Bin\ValidationStage.Devices.dll` + PI DLL from `Bin\` (Orbit DLLs come
@@ -381,6 +381,10 @@ textbox docked at the bottom. `_probeTimer` (300 ms) drives probe-grid refresh; 
 "연결 실패" aren't overwritten), `_system.GetAxisStatuses()` and `_system.GetLogs()`. Everything runs on the UI
 thread now, so the old `RunOnUi` marshalling is gone. F_Main doubles as the **sample code for the 업체** — keep it
 readable and showing the intended usage (low speed after connect, stop probe loop on `CommError`, etc.).
+Log language (2026-10-08): every `AppendLog` text goes through `F_Main.L(ko, en)`, which follows `Messages.Language`
+like the DLL's `T()` — so the whole log switches language. UI texts (buttons, labels, grid state, MessageBoxes) stay
+Korean on purpose. Wrap new log lines in `L()` too. .NET/Windows exception texts embedded in messages
+(`ex.Message`, e.g. socket errors) follow the OS language, not `Messages.Language`.
 
 ## Status / what's not yet verified
 
