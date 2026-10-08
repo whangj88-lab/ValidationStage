@@ -58,6 +58,21 @@ so the caller's program must be x64 too). Both projects have a `CopyDlls` post-b
 
 No tests, no CI, no lint — same as A.
 
+### Vendor package (`Package/`, added 2026-10-08)
+
+Double-click `Package\Build-Package.bat` (ASCII-only, CRLF; pauses, opens `dist\` on success) or run
+`powershell -ExecutionPolicy Bypass -File Package\Build-Package.ps1` → Release x64 rebuild →
+`dist\ValidationStage_SDK_v<x.y.z>\` (`Bin\` = the 5 deliverable files, `Sample\` = sample exe **source** + a generated
+sample-only `ValidationStage.sln`, `README.txt` from `Package\README.txt` with `{VERSION}`) → copies it to %TEMP% and
+builds the sample there alone (same conditions as the vendor: no DLL source) → zip. `dist/` is git-ignored. Version =
+`ValidationStage.Devices` `AssemblyVersion` (first 3 parts) — bump it before each release. The DLL ships as binary only. Shipping the PI/Solartron DLLs to the vendor is
+OK (user confirmed 2026-10-08). No `.pdb` in the package (user decision).
+- The sample csproj builds both ways: if `..\ValidationStage.Devices\*.csproj` exists → `ProjectReference` + PI DLL from
+  `..\PIDll\`; otherwise → file reference `..\..\Bin\ValidationStage.Devices.dll` + PI DLL from `Bin\` (Orbit DLLs come
+  along as dependencies). Paths use `$(MSBuildProjectDirectory)`, not `$(SolutionDir)`.
+- The script drops `bin/obj/Motion/*.user` and the `Remote|x64` config (internal share path) from the packaged sample.
+- When the API changes, update `Package\README.txt` (quick-start code, usage rules) too.
+
 ### Orbit SDK DLLs live in the repo (`OrbitDll/`)
 
 `OrbitLibrary.dll` (the Solartron Orbit3 .NET SDK) is kept in the repo, like `PIDll/` (changed 2026-10-06 so the

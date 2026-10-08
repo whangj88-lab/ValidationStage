@@ -48,11 +48,28 @@
     <Reference Include="System.Xml" />
     <Reference Include="System.Xml.Linq" />
   </ItemGroup>
-  <ItemGroup>
+  <!--
+    ValidationStage.Devices 참조 - 같은 csproj 로 사내 개발과 업체 배포본을 모두 빌드한다.
+    - 사내 (DLL 소스 프로젝트가 옆에 있음): 프로젝트 참조, PI DLL 은 ..\PIDll 에서 복사
+    - 업체 배포본 (Package\Build-Package.ps1 로 만든 폴더): ..\..\Bin 의 DLL 파일 참조, PI DLL 도 Bin 에서 복사
+      (OrbitLibrary.dll, InTheHand.Net.Personal.dll 은 Devices DLL 의 의존 파일이라 Bin 에서 자동으로 복사된다)
+  -->
+  <PropertyGroup>
+    <DevicesProject>$(MSBuildProjectDirectory)\..\ValidationStage.Devices\ValidationStage.Devices.csproj</DevicesProject>
+    <DevicesBinDir>$(MSBuildProjectDirectory)\..\..\Bin\</DevicesBinDir>
+    <PiDllDir Condition="Exists('$(DevicesProject)')">$(MSBuildProjectDirectory)\..\PIDll\</PiDllDir>
+    <PiDllDir Condition="!Exists('$(DevicesProject)')">$(DevicesBinDir)</PiDllDir>
+  </PropertyGroup>
+  <ItemGroup Condition="Exists('$(DevicesProject)')">
     <ProjectReference Include="..\ValidationStage.Devices\ValidationStage.Devices.csproj">
       <Project>{311C222E-44E5-4BFE-A0D3-7B835DE94602}</Project>
       <Name>ValidationStage.Devices</Name>
     </ProjectReference>
+  </ItemGroup>
+  <ItemGroup Condition="!Exists('$(DevicesProject)')">
+    <Reference Include="ValidationStage.Devices">
+      <HintPath>$(DevicesBinDir)ValidationStage.Devices.dll</HintPath>
+    </Reference>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="F_CoordSystem.cs">
@@ -79,7 +96,8 @@
     </EmbeddedResource>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <!-- PI 네이티브 DLL 은 참조로 따라오지 않으므로 직접 복사한다. -->
   <Target Name="CopyDlls" AfterTargets="Build">
-    <Copy SourceFiles="$(SolutionDir)PIDll\PI_GCS2_DLL_x64.dll" DestinationFolder="$(OutDir)" SkipUnchangedFiles="false" />
+    <Copy SourceFiles="$(PiDllDir)PI_GCS2_DLL_x64.dll" DestinationFolder="$(OutDir)" SkipUnchangedFiles="false" />
   </Target>
 </Project>
