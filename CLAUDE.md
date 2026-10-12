@@ -386,7 +386,35 @@ like the DLL's `T()` — so the whole log switches language. UI texts (buttons, 
 Korean on purpose. Wrap new log lines in `L()` too. .NET/Windows exception texts embedded in messages
 (`ex.Message`, e.g. socket errors) follow the OS language, not `Messages.Language`.
 
+### Vision correction (sample exe only, added 2026-10-12)
+
+`ValidationStage/Vision/VisionClient.cs` + the vision row in the speed panel (IP:port box, [연결]/[해제], [비전 보정]).
+Talks to the CSH vision program with the protocol of `C:\Users\PC5\Documents\CSHEmulator\CSHProtocolSample`
+(`CSHClient`/`CSHServer`; the server there is a usable emulator on port 5000): send `R_S@1\r\n`, receive
+`A_R@<n>@` + 44-byte header + 9 (or 17 = Pseudo OMM) `double[n]` arrays + `@\r\n`. User decisions: **sample exe only,
+not the DLL**; frame count fixed at 1; use **TX/TY/TZ** (not COMP_TX..); array order follows the vision's OIS option
+(`VisionClient.OisOption`: true = X,Y,Z, COMP_TX..TZ, TX..TZ; false = X,Y,Z, TX..TZ, COMP_TX..TZ). **The real vision
+program uses `false`** (set by the user 2026-10-12 after TX/TY/TZ came out wrong with `true`, the emulator's default;
+the emulator's frame 0 is all zeros, so it can't show this). [비전 보정] logs the offset and immediately moves
+**relative** (stage X,Y,Z + hexapod TX,TY,TZ in parallel, via the device `MoveAsync(..., false)`); units µm/arcmin.
+Move = offset × `F_Main.VisionCorrectionSign` (default −1 for all axes; sign checked by the user on hardware).
+Timeout (10 s)/comm errors disconnect (to keep request/reply in step). Host saved to `VisionHost.txt`. Works with the
+real vision program (user, 2026-10-12).
+
+### UI manuals (`Doc/`, 2026-10-12)
+
+`Doc/ValidationStage_UI_사용설명서_간단.docx` / `_상세.docx`: vendor-facing UI manuals (quick + detailed), with
+screenshots of the real connected UI and numbered red callouts per area (A stage, B hexapod, C speed/stop/vision,
+D probe, E log, plus the coordinate-system and 3D windows). The user decided the vision correction and the
+coordinate-system window **are** part of what the vendor gets. Generated without Word (none on this PC): a C# raw
+WordprocessingML writer compiled with VS's Roslyn `csc`; screenshots taken by driving the app through UI Automation
+(connect buttons only). The generator was not kept in the repo — if the UI changes, the docs must be redone.
+
 ## Status / what's not yet verified
+
+**2026-10-12: the user reports that all hardware functions have been verified on the real equipment** (incl. the
+DLL-split device classes, hexapod reference and IP scan, stage homing, probe read/scan). The notes below and the
+"not yet verified" remarks elsewhere in this file predate that and are kept for history.
 
 Build and UI smoke-tested (compiles clean, launches, screenshot-verified layout) **without real hardware attached**.
 The DLL split (2026-10-06) was checked the same way plus a PowerShell `Add-Type` smoke test of the DLL with nothing

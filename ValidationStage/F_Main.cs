@@ -29,6 +29,14 @@ namespace ValidationStage
         // 연결 상태 표시를 바뀔 때만 갱신하려고 마지막 상태를 기억한다 ("연결 중..."/"연결 실패" 표시를 덮어쓰지 않게).
         private bool _stageConnected;
         private bool _hexapodConnected;
+        private bool _visionConnected;
+
+        // 비전(CSH) 프로그램: [비전 보정] = R_S@1 전송 -> A_R 의 오프셋만큼 현재 위치에서 상대 이동
+        private readonly VisionClient _vision = new VisionClient();
+
+        // 비전 오프셋 -> 보정 이동량 부호 (X, Y, Z, TX, TY, TZ 순). 이동량 = 오프셋 × 부호.
+        // -1 = 검출된 어긋남을 되돌리는 방향으로 가정 - 장비에서 축별로 확인 후 맞게 바꿀 것.
+        private static readonly double[] VisionCorrectionSign = { -1, -1, -1, -1, -1, -1 };
 
         private readonly Dictionary<Axis, Label> _posLabels = new Dictionary<Axis, Label>();
         private readonly Dictionary<Axis, Label> _statusLabels = new Dictionary<Axis, Label>();
@@ -67,6 +75,7 @@ namespace ValidationStage
 
             _stageHostBox.Text = _system.StageHost;
             _hexapodHostBox.Text = _system.HexapodHost;
+            _visionHostBox.Text = _vision.Host;
             UpdateProbeButtons();
 
             _statusTimer.Start();
@@ -124,6 +133,7 @@ namespace ValidationStage
         {
             _statusTimer.Stop();
             _probeTimer.Stop();
+            _vision.Disconnect();
             _system.DisconnectAll();
         }
 
@@ -305,6 +315,99 @@ namespace ValidationStage
                 {
                     button.Enabled = true;
                 }
+            }
+        }
+
+        private async void VisionConnectButton_Click(object sender, EventArgs e)
+        {
+            _visionConnectButton.Enabled = false;
+            _visionHostBox.Enabled = false;
+            _visionConnLabel.Text = "연결 중...";
+            _visionConnLabel.ForeColor = Color.DarkOrange;
+
+            bool connected = await _vision.ConnectAsync(_visionHostBox.Text);
+
+            _visionConnectButton.Enabled = true;
+            _visionHostBox.Enabled = true;
+            if (!connected)
+            {
+                _visionConnLabel.Text = "연결 실패";
+                _visionConnLabel.ForeColor = Color.Red;
+                AppendLog(L("[Vision] 연결 실패: ", "[Vision] Connect failed: ") + _vision.LastError);
+                return;
+            }
+            AppendLog(L($"[Vision] 연결됨 ({_vision.Host})", $"[Vision] Connected ({_vision.Host})"));
+        }
+
+        private void VisionDisconnectButton_Click(object sender, EventArgs e)
+        {
+            _vision.Disconnect();
+            AppendLog(L("[Vision] 연결 해제", "[Vision] Disconnected"));
+        }
+
+        /// <summary>
+        /// [비전 보정]: 비전에 R_S@1 을 보내 A_R 의 검출 오프셋을 받고, 현재 위치에서 오프셋 × <see cref="VisionCorrectionSign"/> 만큼 상대 이동한다.
+        /// X,Y,Z 는 스테이지, TX,TY,TZ 는 헥사포드 (동시에 이동). 연결 안 된 장비는 건너뛴다.
+        /// </summary>
+        private async void VisionCorrectButton_Click(object sender, EventArgs e)
+        {
+            if (!_vision.IsConnected)
+            {
+                AppendLog(L("[Vision] 먼저 [연결]하세요", "[Vision] Connect first"));
+                return;
+            }
+
+            _visionCorrectButton.Enabled = false;
+            try
+            {
+                AppendLog(L("[Vision] R_S@1 전송 - 오프셋 요청", "[Vision] Sent R_S@1 - requesting offset"));
+                VisionOffset offset = await _vision.RequestOffsetAsync();
+                if (offset == null)
+                {
+                    AppendLog(L("[Vision] 오프셋 수신 실패: ", "[Vision] Failed to get offset: ") + _vision.LastError);
+                    return;
+                }
+                AppendLog(L("[Vision] A_R 수신 - ", "[Vision] A_R received - ")
+                    + $"X={offset.X:0.000}, Y={offset.Y:0.000}, Z={offset.Z:0.000} µm, "
+                    + $"TX={offset.TX:0.000}, TY={offset.TY:0.000}, TZ={offset.TZ:0.000} arcmin");
+
+                double[] move =
+                {
+                    offset.X * VisionCorrectionSign[0], offset.Y * VisionCorrectionSign[1], offset.Z * VisionCorrectionSign[2],
+                    offset.TX * VisionCorrectionSign[3], offset.TY * VisionCorrectionSign[4], offset.TZ * VisionCorrectionSign[5],
+                };
+                AppendLog(L("[Vision] 보정 이동 (상대) - ", "[Vision] Correction move (relative) - ")
+                    + $"X={move[0]:0.000}, Y={move[1]:0.000}, Z={move[2]:0.000} µm, "
+                    + $"TX={move[3]:0.000}, TY={move[4]:0.000}, TZ={move[5]:0.000} arcmin");
+
+                // 이동 실패 원인은 DLL 로그로 표시된다 (헥사포드 레퍼런스 안 잡힘 등)
+                var moves = new List<Task<bool>>();
+                if (_system.Stage.IsConnected)
+                {
+                    moves.Add(_system.Stage.MoveAsync(new[] { Axis.X, Axis.Y, Axis.Z }, new[] { move[0], move[1], move[2] }, false));
+                }
+                else
+                {
+                    AppendLog(L("[Vision] 스테이지가 연결되어 있지 않아 X,Y,Z 보정은 건너뜁니다", "[Vision] Stage not connected - skipping X,Y,Z"));
+                }
+                if (_system.Hexapod.IsConnected)
+                {
+                    moves.Add(_system.Hexapod.MoveAsync(new[] { Axis.TX, Axis.TY, Axis.TZ }, new[] { move[3], move[4], move[5] }, false));
+                }
+                else
+                {
+                    AppendLog(L("[Vision] 헥사포드가 연결되어 있지 않아 TX,TY,TZ 보정은 건너뜁니다", "[Vision] Hexapod not connected - skipping TX,TY,TZ"));
+                }
+
+                bool[] results = await Task.WhenAll(moves);
+                if (results.Length > 0 && results.All(ok => ok))
+                {
+                    AppendLog(L("[Vision] 보정 이동 완료", "[Vision] Correction move done"));
+                }
+            }
+            finally
+            {
+                _visionCorrectButton.Enabled = true;
             }
         }
 
@@ -609,6 +712,7 @@ namespace ValidationStage
         {
             UpdateConnectionLabel(_system.Stage.IsConnected, ref _stageConnected, _stageConnLabel);
             UpdateConnectionLabel(_system.Hexapod.IsConnected, ref _hexapodConnected, _hexapodConnLabel);
+            UpdateConnectionLabel(_vision.IsConnected, ref _visionConnected, _visionConnLabel);
             UpdateAxisStatuses(_system.GetAxisStatuses());
             foreach (LogEntry entry in _system.GetLogs())
             {

@@ -109,6 +109,12 @@
             this._speedCombo = new System.Windows.Forms.ComboBox();
             this._stopAllNormalButton = new System.Windows.Forms.Button();
             this._stopAllButton = new System.Windows.Forms.Button();
+            this._visionHostLabel = new System.Windows.Forms.Label();
+            this._visionHostBox = new System.Windows.Forms.TextBox();
+            this._visionConnectButton = new System.Windows.Forms.Button();
+            this._visionDisconnectButton = new System.Windows.Forms.Button();
+            this._visionCorrectButton = new System.Windows.Forms.Button();
+            this._visionConnLabel = new System.Windows.Forms.Label();
             this._probeGroup = new System.Windows.Forms.GroupBox();
             this._probeGrid = new System.Windows.Forms.DataGridView();
             this._colModuleId = new System.Windows.Forms.DataGridViewTextBoxColumn();
@@ -1085,6 +1091,12 @@
             this._speedPanel.Controls.Add(this._speedCombo);
             this._speedPanel.Controls.Add(this._stopAllNormalButton);
             this._speedPanel.Controls.Add(this._stopAllButton);
+            this._speedPanel.Controls.Add(this._visionHostLabel);
+            this._speedPanel.Controls.Add(this._visionHostBox);
+            this._speedPanel.Controls.Add(this._visionConnectButton);
+            this._speedPanel.Controls.Add(this._visionDisconnectButton);
+            this._speedPanel.Controls.Add(this._visionCorrectButton);
+            this._speedPanel.Controls.Add(this._visionConnLabel);
             this._speedPanel.Dock = System.Windows.Forms.DockStyle.Top;
             this._speedPanel.Location = new System.Drawing.Point(0, 300);
             this._speedPanel.Name = "_speedPanel";
@@ -1135,6 +1147,66 @@
             this._stopAllButton.Text = "전체 정지 (비상)";
             this._stopAllButton.UseVisualStyleBackColor = false;
             this._stopAllButton.Click += new System.EventHandler(this.StopAllButton_Click);
+            //
+            // _visionHostLabel
+            //
+            this._visionHostLabel.AutoSize = true;
+            this._visionHostLabel.Location = new System.Drawing.Point(431, 6);
+            this._visionHostLabel.Margin = new System.Windows.Forms.Padding(33, 0, 3, 0);
+            this._visionHostLabel.Name = "_visionHostLabel";
+            this._visionHostLabel.Padding = new System.Windows.Forms.Padding(0, 6, 4, 0);
+            this._visionHostLabel.Size = new System.Drawing.Size(77, 21);
+            this._visionHostLabel.TabIndex = 3;
+            this._visionHostLabel.Text = "비전 IP:포트";
+            //
+            // _visionHostBox
+            //
+            this._visionHostBox.Location = new System.Drawing.Point(514, 9);
+            this._visionHostBox.Name = "_visionHostBox";
+            this._visionHostBox.Size = new System.Drawing.Size(140, 23);
+            this._visionHostBox.TabIndex = 4;
+            this._visionHostBox.Text = "127.0.0.1:5000";
+            //
+            // _visionConnectButton
+            //
+            this._visionConnectButton.Location = new System.Drawing.Point(660, 9);
+            this._visionConnectButton.Name = "_visionConnectButton";
+            this._visionConnectButton.Size = new System.Drawing.Size(60, 23);
+            this._visionConnectButton.TabIndex = 5;
+            this._visionConnectButton.Text = "연결";
+            this._visionConnectButton.UseVisualStyleBackColor = true;
+            this._visionConnectButton.Click += new System.EventHandler(this.VisionConnectButton_Click);
+            //
+            // _visionDisconnectButton
+            //
+            this._visionDisconnectButton.Location = new System.Drawing.Point(726, 9);
+            this._visionDisconnectButton.Name = "_visionDisconnectButton";
+            this._visionDisconnectButton.Size = new System.Drawing.Size(60, 23);
+            this._visionDisconnectButton.TabIndex = 6;
+            this._visionDisconnectButton.Text = "해제";
+            this._visionDisconnectButton.UseVisualStyleBackColor = true;
+            this._visionDisconnectButton.Click += new System.EventHandler(this.VisionDisconnectButton_Click);
+            //
+            // _visionCorrectButton
+            //
+            this._visionCorrectButton.Location = new System.Drawing.Point(792, 9);
+            this._visionCorrectButton.Name = "_visionCorrectButton";
+            this._visionCorrectButton.Size = new System.Drawing.Size(100, 23);
+            this._visionCorrectButton.TabIndex = 7;
+            this._visionCorrectButton.Text = "비전 보정";
+            this._visionCorrectButton.UseVisualStyleBackColor = true;
+            this._visionCorrectButton.Click += new System.EventHandler(this.VisionCorrectButton_Click);
+            //
+            // _visionConnLabel
+            //
+            this._visionConnLabel.AutoSize = true;
+            this._visionConnLabel.ForeColor = System.Drawing.Color.Red;
+            this._visionConnLabel.Location = new System.Drawing.Point(898, 6);
+            this._visionConnLabel.Name = "_visionConnLabel";
+            this._visionConnLabel.Padding = new System.Windows.Forms.Padding(8, 6, 0, 0);
+            this._visionConnLabel.Size = new System.Drawing.Size(67, 21);
+            this._visionConnLabel.TabIndex = 8;
+            this._visionConnLabel.Text = "연결 안됨";
             // 
             // _probeGroup
             // 
@@ -1415,6 +1487,12 @@
         private System.Windows.Forms.ComboBox _speedCombo;
         private System.Windows.Forms.Button _stopAllButton;
         private System.Windows.Forms.Button _stopAllNormalButton;
+        private System.Windows.Forms.Label _visionHostLabel;
+        private System.Windows.Forms.TextBox _visionHostBox;
+        private System.Windows.Forms.Button _visionConnectButton;
+        private System.Windows.Forms.Button _visionDisconnectButton;
+        private System.Windows.Forms.Button _visionCorrectButton;
+        private System.Windows.Forms.Label _visionConnLabel;
         private System.Windows.Forms.GroupBox _probeGroup;
         private System.Windows.Forms.FlowLayoutPanel _probeBtnRow;
         private System.Windows.Forms.Button _probeConnectButton;
