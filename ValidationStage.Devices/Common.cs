@@ -66,6 +66,15 @@ namespace ValidationStage.Devices
         High = 2
     }
 
+    /// <summary>스테이지 기계 원점 찾기(홈 서칭) 방향.</summary>
+    public enum HomeDirection
+    {
+        /// <summary>(−)리밋 방향 ("HM0")</summary>
+        Negative = 0,
+        /// <summary>(+)리밋 방향 ("HM1")</summary>
+        Positive = 1
+    }
+
     /// <summary>
     /// 마지막으로 실패한 명령의 원인. 각 장비의 <c>LastError</c> 로 조회한다.
     /// 명령이 성공해도 지워지지 않으므로, 함수가 false/null 을 돌려줬을 때만 확인한다.

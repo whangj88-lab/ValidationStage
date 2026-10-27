@@ -327,14 +327,20 @@ namespace ValidationStage.Devices
         #region 원점 / 설정
 
         /// <summary>
-        /// 기계 원점 찾기 ("HM0" - (−)리밋 방향으로 홈 서칭). 모든 축을 동시에 시작하고 끝날 때까지 기다린다.
+        /// 기계 원점 찾기 ("HM0" = (−)리밋 방향, "HM1" = (+)리밋 방향으로 홈 서칭). 모든 축을 동시에 시작하고 끝날 때까지 기다린다.
         /// 축이 실제로 움직이므로 주변 간섭을 확인한 뒤 호출한다. 홈 서칭 속도는 중속 수준으로 맞춘 뒤 시작한다.
         /// </summary>
-        public async Task<bool> HomeAsync(Axis[] axes)
+        /// <param name="axes">원점을 찾을 축</param>
+        /// <param name="directions">축별 방향 (<paramref name="axes"/> 와 같은 순서/개수). null 이면 모두 (−)방향.</param>
+        public async Task<bool> HomeAsync(Axis[] axes, HomeDirection[] directions = null)
         {
             try
             {
                 CheckReady(axes);
+                if (directions != null && directions.Length != axes.Length)
+                {
+                    throw new ArgumentException(T("방향 개수가 축 개수와 다릅니다", "Number of directions does not match number of axes"));
+                }
                 foreach (Axis axis in axes)
                 {
                     int axisNo = AxisNo(axis);
@@ -345,9 +351,10 @@ namespace ValidationStage.Devices
                     WriteIfDifferent(axisNo, "hmad", speed * 10);
                     WriteIfDifferent(axisNo, "hmvf", speed / 10);
                 }
-                foreach (Axis axis in axes)
+                for (int i = 0; i < axes.Length; i++)
                 {
-                    ExpectOk(Query($"{AxisNo(axis)}hm0"));
+                    int dir = directions == null ? 0 : (int)directions[i];
+                    ExpectOk(Query($"{AxisNo(axes[i])}hm{dir}"));
                 }
                 _log.Add(T("원점 찾는 중...", "Homing..."));
 

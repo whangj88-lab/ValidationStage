@@ -217,14 +217,15 @@ namespace ValidationStage.Devices
         #region 원점(Home)
 
         // 스테이지(MMT): 컨트롤러 자체 원점을 쓴다.
-        // - 기계 원점 찾기: 리밋 방향 홈 서칭 (HM0)
+        // - 기계 원점 찾기: 리밋 방향 홈 서칭 (HM0 = (−)방향, HM1 = (+)방향)
         // - 현재 위치를 원점으로: 컨트롤러 위치를 0 으로 설정 (p0)
         // - 원점으로 이동: 컨트롤러 좌표 0 으로 절대 이동
 
-        /// <summary>스테이지 X, Y, Z 기계 원점 찾기 ((−)리밋 방향으로 이동). 주변 간섭을 확인한 뒤 호출한다.</summary>
-        public async Task<bool> HomeStageAsync()
+        /// <summary>스테이지 X, Y, Z 기계 원점 찾기 (축별로 지정한 리밋 방향으로 이동, 기본은 (−)방향). 주변 간섭을 확인한 뒤 호출한다.</summary>
+        public async Task<bool> HomeStageAsync(HomeDirection x = HomeDirection.Negative,
+            HomeDirection y = HomeDirection.Negative, HomeDirection z = HomeDirection.Negative)
         {
-            return Track(await Stage.HomeAsync(MotorizedStage.Axes), Stage.LastError);
+            return Track(await Stage.HomeAsync(MotorizedStage.Axes, new[] { x, y, z }), Stage.LastError);
         }
 
         /// <summary>스테이지 현재 위치를 원점(0)으로 설정한다.</summary>

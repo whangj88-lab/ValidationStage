@@ -145,7 +145,10 @@ the old stage comes back — it would need porting to the DLL's style).
   "busy but position unchanged for 3 s" as stuck and clears it the same way.
 - **Stage home = the controller's own coordinates** (user request 2026-09-30, replacing the file-saved `StageHome.txt`
   approach). Buttons: [기계 원점 찾기] → `HomeAsync` = `hm0` on X,Y,Z
-  (toward the − limit; confirm dialog first), [현재 위치를 원점으로] → `SetZero` = `p0`, [원점으로 이동] → absolute
+  (toward the − limit by default; confirm dialog first; **per-axis direction** added 2026-10-27: `HomeDirection`
+  Negative/Positive → `hm0`/`hm1` (manual p.28: HM0 = −Limit, HM1 = +Limit), `HomeStageAsync(x, y, z)`, UI combos
+  "찾는 방향" X/Y/Z, not persisted (default (−) each launch); `hm1` and its interaction with the stored `HME` (home
+  sensor CCW/CW) not yet run on hardware), [현재 위치를 원점으로] → `SetZero` = `p0`, [원점으로 이동] → absolute
   move to 0. Controller-stored homing speeds were 10 mm/s (HMV 512000), so `HomeAsync` first sets HMV to the 중속
   value (HMA/HMAD ×10, HMVF ÷10; write-if-different). Position counters restart at 0 on controller power-up, so run
   [기계 원점 찾기] after powering the controller on. Not yet run on the stage: homing direction (HME=1 stored) and
@@ -403,12 +406,16 @@ real vision program (user, 2026-10-12).
 
 ### UI manuals (`Doc/`, 2026-10-12)
 
-`Doc/ValidationStage_UI_사용설명서_간단.docx` / `_상세.docx`: vendor-facing UI manuals (quick + detailed), with
+`Doc/ValidationStage_메뉴얼.docx` (the user later merged/edited the two original manuals into this one): vendor-facing UI manual, with
 screenshots of the real connected UI and numbered red callouts per area (A stage, B hexapod, C speed/stop/vision,
 D probe, E log, plus the coordinate-system and 3D windows). The user decided the vision correction and the
 coordinate-system window **are** part of what the vendor gets. Generated without Word (none on this PC): a C# raw
 WordprocessingML writer compiled with VS's Roslyn `csc`; screenshots taken by driving the app through UI Automation
 (connect buttons only). The generator was not kept in the repo — if the UI changes, the docs must be redone.
+Since the user edits the manual by hand, later UI changes are patched in place (2026-10-27, stage home-direction
+combos): only the affected images (`word/media/image1.png` main screen, `image2.png` stage callouts) and table rows in
+`word/document.xml` were replaced inside the zip — new pixels pasted from a fresh unconnected screenshot (area A tint
+in image1 = 0.8417·in + (34, 6, 10)), callouts redrawn in the same style. Don't regenerate the whole document.
 
 ## Status / what's not yet verified
 

@@ -87,6 +87,7 @@ system.DisconnectAll();
 - Hexapod 컨트롤러 전원을 켠 뒤에는 레퍼런스(Hexapod.ReferenceAsync)를 먼저 해야 움직입니다.
   (안 하면 LastError.Code = 5 "unreferenced")
 - Motorized Stage 는 컨트롤러 전원을 켜면 위치가 0 부터 시작합니다. 필요하면 HomeStageAsync(기계 원점 찾기)를 먼저 하십시오.
+  찾는 방향은 축별로 지정합니다 (기본 (-)리밋 방향). 예: HomeStageAsync(HomeDirection.Negative, HomeDirection.Negative, HomeDirection.Positive)
 - 오류/로그 메시지 언어: Messages.Language = Language.Korean / Language.English
 
 

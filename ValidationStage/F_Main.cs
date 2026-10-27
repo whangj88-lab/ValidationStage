@@ -52,6 +52,11 @@ namespace ValidationStage
             _speedCombo.SelectedIndex = 0;
             _speedCombo.SelectedIndexChanged += (s, e) => ApplySpeed(_speedCombo.SelectedIndex);
 
+            // 기계 원점 찾는 방향: 기본은 모두 (-)리밋 방향 (콤보 순서 = HomeDirection 값)
+            _stageHomeDirXCombo.SelectedIndex = (int)HomeDirection.Negative;
+            _stageHomeDirYCombo.SelectedIndex = (int)HomeDirection.Negative;
+            _stageHomeDirZCombo.SelectedIndex = (int)HomeDirection.Negative;
+
             BindAxis(Axis.X, _xMinusButton, _xPlusButton, _xPosLabel, _xStatusLabel);
             BindAxis(Axis.Y, _yMinusButton, _yPlusButton, _yPosLabel, _yStatusLabel);
             BindAxis(Axis.Z, _zMinusButton, _zPlusButton, _zPosLabel, _zStatusLabel);
@@ -445,15 +450,18 @@ namespace ValidationStage
 
         private async void StageFindHomeButton_Click(object sender, EventArgs e)
         {
+            HomeDirection x = (HomeDirection)_stageHomeDirXCombo.SelectedIndex;
+            HomeDirection y = (HomeDirection)_stageHomeDirYCombo.SelectedIndex;
+            HomeDirection z = (HomeDirection)_stageHomeDirZCombo.SelectedIndex;
             DialogResult answer = MessageBox.Show(
-                "X, Y, Z 축이 (-)리밋 방향으로 이동해 기계 원점을 찾습니다.\n주변에 부딪힐 것이 없는지 확인하셨습니까?",
+                $"X, Y, Z 축이 리밋 방향으로 이동해 기계 원점을 찾습니다. ({_stageHomeDirXCombo.Text}, {_stageHomeDirYCombo.Text}, {_stageHomeDirZCombo.Text})\n주변에 부딪힐 것이 없는지 확인하셨습니까?",
                 "기계 원점 찾기", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning);
             if (answer != DialogResult.OK)
             {
                 return;
             }
             _stageFindHomeButton.Enabled = false;
-            if (await _system.HomeStageAsync())
+            if (await _system.HomeStageAsync(x, y, z))
             {
                 AppendLog(L("[Stage] 기계 원점 찾기 완료", "[Stage] Homing done"));
             }

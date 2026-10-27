@@ -96,6 +96,10 @@
             this._zStopButton = new System.Windows.Forms.Button();
             this._stageHomeRow = new System.Windows.Forms.FlowLayoutPanel();
             this._stageFindHomeButton = new System.Windows.Forms.Button();
+            this._stageHomeDirLabel = new System.Windows.Forms.Label();
+            this._stageHomeDirXCombo = new System.Windows.Forms.ComboBox();
+            this._stageHomeDirYCombo = new System.Windows.Forms.ComboBox();
+            this._stageHomeDirZCombo = new System.Windows.Forms.ComboBox();
             this._stageSetHomeButton = new System.Windows.Forms.Button();
             this._stageMoveHomeButton = new System.Windows.Forms.Button();
             this._stageConnRow = new System.Windows.Forms.FlowLayoutPanel();
@@ -983,6 +987,10 @@
             // _stageHomeRow
             // 
             this._stageHomeRow.Controls.Add(this._stageFindHomeButton);
+            this._stageHomeRow.Controls.Add(this._stageHomeDirLabel);
+            this._stageHomeRow.Controls.Add(this._stageHomeDirXCombo);
+            this._stageHomeRow.Controls.Add(this._stageHomeDirYCombo);
+            this._stageHomeRow.Controls.Add(this._stageHomeDirZCombo);
             this._stageHomeRow.Controls.Add(this._stageSetHomeButton);
             this._stageHomeRow.Controls.Add(this._stageMoveHomeButton);
             this._stageHomeRow.Dock = System.Windows.Forms.DockStyle.Bottom;
@@ -1001,10 +1009,53 @@
             this._stageFindHomeButton.Text = "기계 원점 찾기";
             this._stageFindHomeButton.UseVisualStyleBackColor = true;
             this._stageFindHomeButton.Click += new System.EventHandler(this.StageFindHomeButton_Click);
-            // 
+            //
+            // _stageHomeDirLabel
+            //
+            this._stageHomeDirLabel.AutoSize = true;
+            this._stageHomeDirLabel.Location = new System.Drawing.Point(125, 6);
+            this._stageHomeDirLabel.Name = "_stageHomeDirLabel";
+            this._stageHomeDirLabel.Padding = new System.Windows.Forms.Padding(0, 6, 0, 0);
+            this._stageHomeDirLabel.Size = new System.Drawing.Size(58, 21);
+            this._stageHomeDirLabel.TabIndex = 4;
+            this._stageHomeDirLabel.Text = "찾는 방향:";
+            //
+            // _stageHomeDirXCombo
+            //
+            this._stageHomeDirXCombo.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this._stageHomeDirXCombo.Items.AddRange(new object[] {
+            "X (-)",
+            "X (+)"});
+            this._stageHomeDirXCombo.Location = new System.Drawing.Point(189, 9);
+            this._stageHomeDirXCombo.Name = "_stageHomeDirXCombo";
+            this._stageHomeDirXCombo.Size = new System.Drawing.Size(58, 23);
+            this._stageHomeDirXCombo.TabIndex = 5;
+            //
+            // _stageHomeDirYCombo
+            //
+            this._stageHomeDirYCombo.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this._stageHomeDirYCombo.Items.AddRange(new object[] {
+            "Y (-)",
+            "Y (+)"});
+            this._stageHomeDirYCombo.Location = new System.Drawing.Point(253, 9);
+            this._stageHomeDirYCombo.Name = "_stageHomeDirYCombo";
+            this._stageHomeDirYCombo.Size = new System.Drawing.Size(58, 23);
+            this._stageHomeDirYCombo.TabIndex = 6;
+            //
+            // _stageHomeDirZCombo
+            //
+            this._stageHomeDirZCombo.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this._stageHomeDirZCombo.Items.AddRange(new object[] {
+            "Z (-)",
+            "Z (+)"});
+            this._stageHomeDirZCombo.Location = new System.Drawing.Point(317, 9);
+            this._stageHomeDirZCombo.Name = "_stageHomeDirZCombo";
+            this._stageHomeDirZCombo.Size = new System.Drawing.Size(58, 23);
+            this._stageHomeDirZCombo.TabIndex = 7;
+            //
             // _stageSetHomeButton
-            // 
-            this._stageSetHomeButton.Location = new System.Drawing.Point(125, 9);
+            //
+            this._stageSetHomeButton.Location = new System.Drawing.Point(381, 9);
             this._stageSetHomeButton.Name = "_stageSetHomeButton";
             this._stageSetHomeButton.Size = new System.Drawing.Size(150, 23);
             this._stageSetHomeButton.TabIndex = 0;
@@ -1014,7 +1065,7 @@
             // 
             // _stageMoveHomeButton
             // 
-            this._stageMoveHomeButton.Location = new System.Drawing.Point(281, 9);
+            this._stageMoveHomeButton.Location = new System.Drawing.Point(537, 9);
             this._stageMoveHomeButton.Name = "_stageMoveHomeButton";
             this._stageMoveHomeButton.Size = new System.Drawing.Size(110, 23);
             this._stageMoveHomeButton.TabIndex = 1;
@@ -1532,6 +1583,10 @@
         private System.Windows.Forms.Button _tzStopButton;
         private System.Windows.Forms.FlowLayoutPanel _stageHomeRow;
         private System.Windows.Forms.Button _stageFindHomeButton;
+        private System.Windows.Forms.Label _stageHomeDirLabel;
+        private System.Windows.Forms.ComboBox _stageHomeDirXCombo;
+        private System.Windows.Forms.ComboBox _stageHomeDirYCombo;
+        private System.Windows.Forms.ComboBox _stageHomeDirZCombo;
         private System.Windows.Forms.Button _stageSetHomeButton;
         private System.Windows.Forms.Button _stageMoveHomeButton;
         private System.Windows.Forms.FlowLayoutPanel _hexapodHomeRow;
