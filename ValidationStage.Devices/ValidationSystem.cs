@@ -228,6 +228,12 @@ namespace ValidationStage.Devices
             return Track(await Stage.HomeAsync(MotorizedStage.Axes, new[] { x, y, z }), Stage.LastError);
         }
 
+        /// <summary>스테이지 한 축(X, Y, Z 중 하나)만 기계 원점 찾기. 주변 간섭을 확인한 뒤 호출한다.</summary>
+        public async Task<bool> HomeStageAxisAsync(Axis axis, HomeDirection direction = HomeDirection.Negative)
+        {
+            return Track(await Stage.HomeAsync(new[] { axis }, new[] { direction }), Stage.LastError);
+        }
+
         /// <summary>스테이지 현재 위치를 원점(0)으로 설정한다.</summary>
         public bool SetStageZero()
         {

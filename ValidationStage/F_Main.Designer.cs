@@ -94,6 +94,9 @@
             this._zTargetInput = new System.Windows.Forms.NumericUpDown();
             this._zMoveButton = new System.Windows.Forms.Button();
             this._zStopButton = new System.Windows.Forms.Button();
+            this._xHomeButton = new System.Windows.Forms.Button();
+            this._yHomeButton = new System.Windows.Forms.Button();
+            this._zHomeButton = new System.Windows.Forms.Button();
             this._stageHomeRow = new System.Windows.Forms.FlowLayoutPanel();
             this._stageFindHomeButton = new System.Windows.Forms.Button();
             this._stageHomeDirLabel = new System.Windows.Forms.Label();
@@ -655,13 +658,14 @@
             // 
             // _stageAxisTable
             // 
-            this._stageAxisTable.ColumnCount = 8;
+            this._stageAxisTable.ColumnCount = 9;
             this._stageAxisTable.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 40F));
             this._stageAxisTable.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 50F));
             this._stageAxisTable.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 100F));
             this._stageAxisTable.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 50F));
             this._stageAxisTable.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 90F));
             this._stageAxisTable.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 120F));
+            this._stageAxisTable.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 60F));
             this._stageAxisTable.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 60F));
             this._stageAxisTable.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 60F));
             this._stageAxisTable.Controls.Add(this._xNameLabel, 0, 0);
@@ -688,6 +692,9 @@
             this._stageAxisTable.Controls.Add(this._zTargetInput, 5, 2);
             this._stageAxisTable.Controls.Add(this._zMoveButton, 6, 2);
             this._stageAxisTable.Controls.Add(this._zStopButton, 7, 2);
+            this._stageAxisTable.Controls.Add(this._xHomeButton, 8, 0);
+            this._stageAxisTable.Controls.Add(this._yHomeButton, 8, 1);
+            this._stageAxisTable.Controls.Add(this._zHomeButton, 8, 2);
             this._stageAxisTable.Dock = System.Windows.Forms.DockStyle.Fill;
             this._stageAxisTable.Location = new System.Drawing.Point(3, 55);
             this._stageAxisTable.Name = "_stageAxisTable";
@@ -901,6 +908,36 @@
             this._xStopButton.TabIndex = 17;
             this._xStopButton.Text = "정지";
             this._xStopButton.UseVisualStyleBackColor = true;
+            //
+            // _xHomeButton
+            //
+            this._xHomeButton.Dock = System.Windows.Forms.DockStyle.Fill;
+            this._xHomeButton.Location = new System.Drawing.Point(627, 13);
+            this._xHomeButton.Name = "_xHomeButton";
+            this._xHomeButton.Size = new System.Drawing.Size(54, 56);
+            this._xHomeButton.TabIndex = 18;
+            this._xHomeButton.Text = "원점";
+            this._xHomeButton.UseVisualStyleBackColor = true;
+            //
+            // _yHomeButton
+            //
+            this._yHomeButton.Dock = System.Windows.Forms.DockStyle.Fill;
+            this._yHomeButton.Location = new System.Drawing.Point(627, 75);
+            this._yHomeButton.Name = "_yHomeButton";
+            this._yHomeButton.Size = new System.Drawing.Size(54, 56);
+            this._yHomeButton.TabIndex = 18;
+            this._yHomeButton.Text = "원점";
+            this._yHomeButton.UseVisualStyleBackColor = true;
+            //
+            // _zHomeButton
+            //
+            this._zHomeButton.Dock = System.Windows.Forms.DockStyle.Fill;
+            this._zHomeButton.Location = new System.Drawing.Point(627, 137);
+            this._zHomeButton.Name = "_zHomeButton";
+            this._zHomeButton.Size = new System.Drawing.Size(54, 56);
+            this._zHomeButton.TabIndex = 18;
+            this._zHomeButton.Text = "원점";
+            this._zHomeButton.UseVisualStyleBackColor = true;
             // 
             // _yTargetInput
             // 
@@ -1572,6 +1609,9 @@
         private System.Windows.Forms.NumericUpDown _zTargetInput;
         private System.Windows.Forms.Button _zMoveButton;
         private System.Windows.Forms.Button _zStopButton;
+        private System.Windows.Forms.Button _xHomeButton;
+        private System.Windows.Forms.Button _yHomeButton;
+        private System.Windows.Forms.Button _zHomeButton;
         private System.Windows.Forms.NumericUpDown _txTargetInput;
         private System.Windows.Forms.Button _txMoveButton;
         private System.Windows.Forms.Button _txStopButton;

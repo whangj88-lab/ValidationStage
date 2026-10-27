@@ -78,6 +78,10 @@ namespace ValidationStage
             BindStop(Axis.TY, _tyStopButton);
             BindStop(Axis.TZ, _tzStopButton);
 
+            BindStageHome(Axis.X, _xHomeButton, _stageHomeDirXCombo);
+            BindStageHome(Axis.Y, _yHomeButton, _stageHomeDirYCombo);
+            BindStageHome(Axis.Z, _zHomeButton, _stageHomeDirZCombo);
+
             _stageHostBox.Text = _system.StageHost;
             _hexapodHostBox.Text = _system.HexapodHost;
             _visionHostBox.Text = _vision.Host;
@@ -116,6 +120,29 @@ namespace ValidationStage
             stopBtn.Click += async (s, e) =>
             {
                 await _system.StopAxisAsync(axis);
+            };
+        }
+
+        /// <summary>
+        /// 스테이지 축 한 줄의 [원점] 버튼을 연결한다 (그 축만 기계 원점 찾기, 방향은 아래 "찾는 방향" 콤보의 해당 축 값).
+        /// </summary>
+        private void BindStageHome(Axis axis, Button homeBtn, ComboBox dirCombo)
+        {
+            homeBtn.Click += async (s, e) =>
+            {
+                DialogResult answer = MessageBox.Show(
+                    $"{axis} 축만 리밋 방향으로 이동해 기계 원점을 찾습니다. ({dirCombo.Text})\n주변에 부딪힐 것이 없는지 확인하셨습니까?",
+                    "기계 원점 찾기", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning);
+                if (answer != DialogResult.OK)
+                {
+                    return;
+                }
+                homeBtn.Enabled = false;
+                if (await _system.HomeStageAxisAsync(axis, (HomeDirection)dirCombo.SelectedIndex))
+                {
+                    AppendLog(L($"[Stage] {axis} 기계 원점 찾기 완료", $"[Stage] {axis} homing done"));
+                }
+                homeBtn.Enabled = true;
             };
         }
 

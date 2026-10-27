@@ -147,8 +147,11 @@ the old stage comes back — it would need porting to the DLL's style).
   approach). Buttons: [기계 원점 찾기] → `HomeAsync` = `hm0` on X,Y,Z
   (toward the − limit by default; confirm dialog first; **per-axis direction** added 2026-10-27: `HomeDirection`
   Negative/Positive → `hm0`/`hm1` (manual p.28: HM0 = −Limit, HM1 = +Limit), `HomeStageAsync(x, y, z)`, UI combos
-  "찾는 방향" X/Y/Z, not persisted (default (−) each launch); `hm1` and its interaction with the stored `HME` (home
-  sensor CCW/CW) not yet run on hardware), [현재 위치를 원점으로] → `SetZero` = `p0`, [원점으로 이동] → absolute
+  "찾는 방향" X/Y/Z, not persisted (default (−) each launch). On hardware, `hm1` alone still searched toward − (user,
+  2026-10-27), so `HomeAsync` now also writes `HME` (stored in flash, write-if-different) to match: (−) = `hme1` (CW,
+  the stored default; CW limit = −), (+) = `hme0` (CCW), and logs "HMEx, HMx" per axis — **hypothesis, being tested
+  per axis by the user**. Per-axis homing: a [원점] column (9th) in the stage axis table → `HomeStageAxisAsync(axis,
+  dir)`, direction from that axis's "찾는 방향" combo), [현재 위치를 원점으로] → `SetZero` = `p0`, [원점으로 이동] → absolute
   move to 0. Controller-stored homing speeds were 10 mm/s (HMV 512000), so `HomeAsync` first sets HMV to the 중속
   value (HMA/HMAD ×10, HMVF ÷10; write-if-different). Position counters restart at 0 on controller power-up, so run
   [기계 원점 찾기] after powering the controller on. Not yet run on the stage: homing direction (HME=1 stored) and

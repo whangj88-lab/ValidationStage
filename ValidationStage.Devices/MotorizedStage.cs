@@ -327,8 +327,9 @@ namespace ValidationStage.Devices
         #region 원점 / 설정
 
         /// <summary>
-        /// 기계 원점 찾기 ("HM0" = (−)리밋 방향, "HM1" = (+)리밋 방향으로 홈 서칭). 모든 축을 동시에 시작하고 끝날 때까지 기다린다.
+        /// 기계 원점 찾기 ("HM0" = (−)리밋 방향, "HM1" = (+)리밋 방향으로 홈 서칭). 지정한 축을 동시에 시작하고 끝날 때까지 기다린다.
         /// 축이 실제로 움직이므로 주변 간섭을 확인한 뒤 호출한다. 홈 서칭 속도는 중속 수준으로 맞춘 뒤 시작한다.
+        /// 홈 센서 방향(HME, 컨트롤러에 저장됨)도 방향에 맞춰 쓴다: (−) = HME1 (CW, 이 스테이지의 (−)리밋 쪽), (+) = HME0 (CCW).
         /// </summary>
         /// <param name="axes">원점을 찾을 축</param>
         /// <param name="directions">축별 방향 (<paramref name="axes"/> 와 같은 순서/개수). null 이면 모두 (−)방향.</param>
@@ -353,8 +354,14 @@ namespace ValidationStage.Devices
                 }
                 for (int i = 0; i < axes.Length; i++)
                 {
+                    int axisNo = AxisNo(axes[i]);
                     int dir = directions == null ? 0 : (int)directions[i];
-                    ExpectOk(Query($"{AxisNo(axes[i])}hm{dir}"));
+                    // HM 인자만 바꿔서는 (+)를 골라도 (−)로 찾았음 (2026-10-27) - 저장된 HME(홈 센서 방향)가 방향을 정하는 것으로 보고 같이 쓴다.
+                    // 이 스테이지는 CW 리밋 = (−), CCW 리밋 = (+) 이므로 (−) = HME1(CW), (+) = HME0(CCW).
+                    int hme = dir == 0 ? 1 : 0;
+                    WriteIfDifferent(axisNo, "hme", hme);
+                    _log.Add(T($"{axes[i]} 원점 찾기 시작 (HME{hme}, HM{dir})", $"{axes[i]} homing started (HME{hme}, HM{dir})"));
+                    ExpectOk(Query($"{axisNo}hm{dir}"));
                 }
                 _log.Add(T("원점 찾는 중...", "Homing..."));
 
