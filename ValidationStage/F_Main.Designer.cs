@@ -110,6 +110,7 @@
             this._stageHostBox = new System.Windows.Forms.TextBox();
             this._stageConnectButton = new System.Windows.Forms.Button();
             this._stageDisconnectButton = new System.Windows.Forms.Button();
+            this._stageDirectionButton = new System.Windows.Forms.Button();
             this._stageConnLabel = new System.Windows.Forms.Label();
             this._speedPanel = new System.Windows.Forms.FlowLayoutPanel();
             this._speedLabel = new System.Windows.Forms.Label();
@@ -1116,6 +1117,7 @@
             this._stageConnRow.Controls.Add(this._stageHostBox);
             this._stageConnRow.Controls.Add(this._stageConnectButton);
             this._stageConnRow.Controls.Add(this._stageDisconnectButton);
+            this._stageConnRow.Controls.Add(this._stageDirectionButton);
             this._stageConnRow.Controls.Add(this._stageConnLabel);
             this._stageConnRow.Dock = System.Windows.Forms.DockStyle.Top;
             this._stageConnRow.Location = new System.Drawing.Point(3, 19);
@@ -1161,12 +1163,22 @@
             this._stageDisconnectButton.Text = "해제";
             this._stageDisconnectButton.UseVisualStyleBackColor = true;
             this._stageDisconnectButton.Click += new System.EventHandler(this.StageDisconnectButton_Click);
-            // 
+            //
+            // _stageDirectionButton
+            //
+            this._stageDirectionButton.Location = new System.Drawing.Point(317, 9);
+            this._stageDirectionButton.Name = "_stageDirectionButton";
+            this._stageDirectionButton.Size = new System.Drawing.Size(80, 23);
+            this._stageDirectionButton.TabIndex = 5;
+            this._stageDirectionButton.Text = "모터 방향";
+            this._stageDirectionButton.UseVisualStyleBackColor = true;
+            this._stageDirectionButton.Click += new System.EventHandler(this.StageDirectionButton_Click);
+            //
             // _stageConnLabel
-            // 
+            //
             this._stageConnLabel.AutoSize = true;
             this._stageConnLabel.ForeColor = System.Drawing.Color.Red;
-            this._stageConnLabel.Location = new System.Drawing.Point(317, 6);
+            this._stageConnLabel.Location = new System.Drawing.Point(403, 6);
             this._stageConnLabel.Name = "_stageConnLabel";
             this._stageConnLabel.Padding = new System.Windows.Forms.Padding(8, 6, 0, 0);
             this._stageConnLabel.Size = new System.Drawing.Size(67, 21);
@@ -1609,6 +1621,7 @@
         private System.Windows.Forms.NumericUpDown _zTargetInput;
         private System.Windows.Forms.Button _zMoveButton;
         private System.Windows.Forms.Button _zStopButton;
+        private System.Windows.Forms.Button _stageDirectionButton;
         private System.Windows.Forms.Button _xHomeButton;
         private System.Windows.Forms.Button _yHomeButton;
         private System.Windows.Forms.Button _zHomeButton;

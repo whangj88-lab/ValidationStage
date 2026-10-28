@@ -78,6 +78,12 @@
     <Compile Include="F_CoordSystem.Designer.cs">
       <DependentUpon>F_CoordSystem.cs</DependentUpon>
     </Compile>
+    <Compile Include="F_StageDirection.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="F_StageDirection.Designer.cs">
+      <DependentUpon>F_StageDirection.cs</DependentUpon>
+    </Compile>
     <Compile Include="F_Main.cs">
       <SubType>Form</SubType>
     </Compile>

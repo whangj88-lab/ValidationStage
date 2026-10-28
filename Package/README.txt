@@ -89,6 +89,8 @@ system.DisconnectAll();
 - Motorized Stage 는 컨트롤러 전원을 켜면 위치가 0 부터 시작합니다. 필요하면 HomeStageAsync(기계 원점 찾기)를 먼저 하십시오.
   찾는 방향은 축별로 지정합니다 (기본 (-)리밋 방향). 예: HomeStageAsync(HomeDirection.Negative, HomeDirection.Negative, HomeDirection.Positive)
   한 축만 찾을 때는 HomeStageAxisAsync(Axis.Z, HomeDirection.Positive)
+- 스테이지 축의 모터 회전 방향은 Stage.GetMotorDirection(axis) / Stage.SetMotorDirection(axis, MotorDirection.Ccw 또는 Cw) 로
+  읽고 바꿉니다 (컨트롤러에 저장됨). 바꾸면 조그/이동/원점 찾기 방향이 모두 반대가 되므로, 저속으로 양쪽 리밋 동작을 먼저 확인하십시오.
 - 오류/로그 메시지 언어: Messages.Language = Language.Korean / Language.English
 
 

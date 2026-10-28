@@ -427,6 +427,46 @@ namespace ValidationStage.Devices
             }
         }
 
+        /// <summary>축의 모터 회전 방향 설정(REV)을 컨트롤러에서 읽는다. 실패하면 null.</summary>
+        public MotorDirection? GetMotorDirection(Axis axis)
+        {
+            try
+            {
+                CheckConnected();
+                int? rev = ReadSetting(AxisNo(axis), "rev");
+                if (rev != 0 && rev != 1)
+                {
+                    throw new DeviceException(T($"{axis} 모터 방향(REV) 응답을 해석하지 못했습니다", $"Could not parse {axis} motor direction (REV) reply"));
+                }
+                return (MotorDirection)rev.Value;
+            }
+            catch (Exception ex)
+            {
+                _errors.Fail(ex);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// 축의 모터 회전 방향(REV)을 바꾼다. 컨트롤러에 저장되는 값이라 다를 때만 쓴다. 조그/이동/원점 찾기 방향이 모두 반대가 된다.
+        /// 리밋 센서 판정이 함께 바뀌는지는 장비에서 확인되지 않았으므로, 바꾼 뒤에는 저속으로 양쪽 리밋에서 멈추는지 먼저 확인한다.
+        /// </summary>
+        public bool SetMotorDirection(Axis axis, MotorDirection direction)
+        {
+            try
+            {
+                CheckReady(new[] { axis });
+                WriteIfDifferent(AxisNo(axis), "rev", (int)direction);
+                _log.Add(T($"{axis} 모터 방향 = {direction} (REV{(int)direction})", $"{axis} motor direction = {direction} (REV{(int)direction})"));
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _errors.Fail(ex);
+                return false;
+            }
+        }
+
         /// <summary>속도 단계를 X, Y, Z 에 적용한다 (<see cref="SpeedLevelValues"/>, 가/감속도 = 속도 × 10, 약 0.1초에 목표 속도 도달).</summary>
         public bool SetSpeedLevel(SpeedLevel level)
         {
@@ -588,14 +628,20 @@ namespace ValidationStage.Devices
 
         private void WriteIfDifferent(int axisNo, string command, int value)
         {
-            // 조회 응답 예: "*#1V512000", "*#1AD5120000"
-            string reply = Query($"{axisNo}{command}");
-            Match match = Regex.Match(reply, command + @"(-?\d+)$", RegexOptions.IgnoreCase);
-            if (match.Success && int.Parse(match.Groups[1].Value) == value)
+            if (ReadSetting(axisNo, command) == value)
             {
                 return;
             }
             ExpectOk(Query($"{axisNo}{command}{value}"));
+        }
+
+        /// <summary>설정값 하나를 조회한다. 응답을 해석하지 못하면 null.</summary>
+        private int? ReadSetting(int axisNo, string command)
+        {
+            // 조회 응답 예: "*#1V512000", "*#1AD5120000"
+            string reply = Query($"{axisNo}{command}");
+            Match match = Regex.Match(reply, command + @"(-?\d+)$", RegexOptions.IgnoreCase);
+            return match.Success ? int.Parse(match.Groups[1].Value) : (int?)null;
         }
 
         private static void ExpectOk(string reply)

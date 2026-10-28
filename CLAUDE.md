@@ -159,6 +159,13 @@ the old stage comes back — it would need porting to the DLL's style).
 - **Per-axis busy check (2026-10-06, user request):** `CheckReady` rejects a command only if one of *its own* axes is
   moving, so e.g. Y can jog/move while X is moving. (Before, any moving axis blocked all stage commands.)
 - Limit mapping verified on the stage (2026-09-30): **CCW limit (bit13) = +, CW limit (bit12) = −** (REV=1).
+- **Motor direction (REV), added 2026-10-28 (user chose the controller's REV over a DLL sign flip):** manual 9.1.5 —
+  `REV` per axis, 0 = CCW, 1 = CW (default), stored in flash. `MotorizedStage.GetMotorDirection(axis)` /
+  `SetMotorDirection(axis, MotorDirection)` (write-if-different, refused while that axis moves). Sample: [모터 방향] in
+  the stage connection row → `F_StageDirection` (own designer file; X/Y/Z current value + combo, [적용] with confirm).
+  The user asked for all three axes in the UI for now and will prune it later. **Unverified on hardware:** whether the
+  limit bits (bit12/13 → `IsNegLimit`/`IsPosLimit`) and the HME mapping in `HomeAsync` (CW = −) flip with REV — both
+  still assume REV=1; whether the controller still stops at the limit it is driving toward; position-count sign.
 
 ### Origin of the hexapod code (A)
 

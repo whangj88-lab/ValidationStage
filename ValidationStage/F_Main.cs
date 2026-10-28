@@ -475,6 +475,20 @@ namespace ValidationStage
             _system.DisconnectHexapod();
         }
 
+        /// <summary>[모터 방향]: 스테이지 X, Y, Z 모터 회전 방향(REV) 설정 창.</summary>
+        private void StageDirectionButton_Click(object sender, EventArgs e)
+        {
+            if (!_system.Stage.IsConnected)
+            {
+                AppendLog(L("[Stage] 먼저 [연결]하세요", "[Stage] Connect first"));
+                return;
+            }
+            using (var form = new F_StageDirection(_system.Stage, AppendLog))
+            {
+                form.ShowDialog(this);
+            }
+        }
+
         private async void StageFindHomeButton_Click(object sender, EventArgs e)
         {
             HomeDirection x = (HomeDirection)_stageHomeDirXCombo.SelectedIndex;
@@ -933,7 +947,7 @@ namespace ValidationStage
         /// 샘플이 남기는 로그 문구도 DLL 메시지와 같은 언어(Messages.Language)로 쓴다.
         /// 화면 문구(버튼, 라벨, 확인 창)는 한글 UI 그대로 둔다.
         /// </summary>
-        private static string L(string korean, string english)
+        internal static string L(string korean, string english)
         {
             return Messages.Language == Language.English ? english : korean;
         }

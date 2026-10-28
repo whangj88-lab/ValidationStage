@@ -66,6 +66,15 @@ namespace ValidationStage.Devices
         High = 2
     }
 
+    /// <summary>스테이지 모터 회전 방향 설정 (MMT "REV", 컨트롤러에 저장됨).</summary>
+    public enum MotorDirection
+    {
+        /// <summary>CCW 방향 ("REV0")</summary>
+        Ccw = 0,
+        /// <summary>CW 방향 ("REV1", 컨트롤러 기본값)</summary>
+        Cw = 1
+    }
+
     /// <summary>스테이지 기계 원점 찾기(홈 서칭) 방향.</summary>
     public enum HomeDirection
     {
