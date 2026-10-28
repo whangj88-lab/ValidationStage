@@ -163,9 +163,21 @@ the old stage comes back — it would need porting to the DLL's style).
   `REV` per axis, 0 = CCW, 1 = CW (default), stored in flash. `MotorizedStage.GetMotorDirection(axis)` /
   `SetMotorDirection(axis, MotorDirection)` (write-if-different, refused while that axis moves). Sample: [모터 방향] in
   the stage connection row → `F_StageDirection` (own designer file; X/Y/Z current value + combo, [적용] with confirm).
-  The user asked for all three axes in the UI for now and will prune it later. **Unverified on hardware:** whether the
-  limit bits (bit12/13 → `IsNegLimit`/`IsPosLimit`) and the HME mapping in `HomeAsync` (CW = −) flip with REV — both
-  still assume REV=1; whether the controller still stops at the limit it is driving toward; position-count sign.
+  The user asked for all three axes in the UI for now and will prune it later.
+- **REV follow-up (2026-10-28, user-reported on hardware):** (1) a REV write only takes effect after disconnect +
+  reconnect; (2) REV does **not** swap the limit sensors (the axis drives past the limit). Fix: `SetMotorDirections(axes,
+  dirs)` (single-axis `SetMotorDirection` wraps it) writes REV **and `HLS`** (manual 9.1.9: 0 = LR limits as wired,
+  1 = LR limits swapped; stored) with HLS = 0 for REV1 (`LimitVerifiedDirection`, the config the limit mapping was
+  verified with, HLS assumed at its default 0) and 1 for REV0, then — only if something was written — `Disconnect` →
+  300 ms → `Connect(_host)` automatically; requires all of X/Y/Z stopped. `IsLimitDirectionMatched(axis)` reads REV+HLS;
+  `Connect` logs a warning per mismatched axis (no blocking). Model behind it: the controller handles +/−, limits and
+  HME in logical direction and REV only flips the motor output, so with HLS matched **jog (`j+`/`j-`), `HomeAsync`'s
+  HME mapping and `IsPosLimit`=bit13 / `IsNegLimit`=bit12 are left unchanged**. `F_StageDirection` shows
+  "리밋 OK/불일치", re-applies mismatched axes too, runs the apply via `Task.Run` (can't close meanwhile).
+  **Unverified on hardware:** that HLS swaps both the stop and the STATUS limit bits (if the bits stay raw, the UI limit
+  lamps will be swapped at REV0); that reconnect also applies HLS; HME direction at REV0; the sample's commented-out
+  `HLSWAP` (not in the manual) was not used. STATUS bit15 = REV, bit16 = HLS per manual — not used (the doc example
+  reply has bit16 = 1, so the bit numbering is doubtful).
 
 ### Origin of the hexapod code (A)
 

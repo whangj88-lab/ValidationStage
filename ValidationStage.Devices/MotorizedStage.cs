@@ -65,6 +65,11 @@ namespace ValidationStage.Devices
         private const int ReadTimeoutMs = 1000;
         private const int ReplyQuietMs = 10;
         private const int PollIntervalMs = 100;
+        private const int ReconnectDelayMs = 300;
+
+        // 리밋 매핑(CCW 리밋 = +, CW 리밋 = −)을 실장비로 확인한 모터 방향 (2026-09-30, REV1). 그때 HLS 는 기본값 0 으로 본다.
+        // REV 를 이것과 다르게 하면 HLS1(리밋 방향 전환)로 리밋도 같이 바꿔야 + 이동이 + 쪽 리밋에서 멈춘다.
+        private const MotorDirection LimitVerifiedDirection = MotorDirection.Cw;
 
         private TcpClient _client;
         private NetworkStream _stream;
@@ -74,6 +79,7 @@ namespace ValidationStage.Devices
 
         private AxisStatus[] _statuses = new AxisStatus[0];
         private CancellationTokenSource _pollCts;
+        private string _host;
 
         private readonly LogBuffer _log = new LogBuffer("Stage");
         private readonly DeviceErrors _errors;
@@ -164,7 +170,9 @@ namespace ValidationStage.Devices
                 CancellationToken token = _pollCts.Token;
                 Task.Run(() => PollingStatus(token));
 
+                _host = host;
                 _log.Add(T("연결됨", "Connected"));
+                WarnLimitMismatch();
                 return true;
             }
             catch (Exception ex)
@@ -358,6 +366,8 @@ namespace ValidationStage.Devices
                     int dir = directions == null ? 0 : (int)directions[i];
                     // HM 인자만 바꿔서는 (+)를 골라도 (−)로 찾았음 (2026-10-27) - 저장된 HME(홈 센서 방향)가 방향을 정하는 것으로 보고 같이 쓴다.
                     // 이 스테이지는 CW 리밋 = (−), CCW 리밋 = (+) 이므로 (−) = HME1(CW), (+) = HME0(CCW).
+                    // REV 를 바꿔도 그대로 쓴다: 컨트롤러는 +/−, 리밋, 홈 방향을 모두 논리 방향으로 다루고 REV 는 모터 출력만 뒤집는다.
+                    // 리밋 입력만 실제 센서 위치를 따르므로 SetMotorDirections 가 HLS 로 리밋을 같이 바꿔 논리 방향에 맞춘다.
                     int hme = dir == 0 ? 1 : 0;
                     WriteIfDifferent(axisNo, "hme", hme);
                     _log.Add(T($"{axes[i]} 원점 찾기 시작 (HME{hme}, HM{dir})", $"{axes[i]} homing started (HME{hme}, HM{dir})"));
@@ -448,16 +458,77 @@ namespace ValidationStage.Devices
         }
 
         /// <summary>
-        /// 축의 모터 회전 방향(REV)을 바꾼다. 컨트롤러에 저장되는 값이라 다를 때만 쓴다. 조그/이동/원점 찾기 방향이 모두 반대가 된다.
-        /// 리밋 센서 판정이 함께 바뀌는지는 장비에서 확인되지 않았으므로, 바꾼 뒤에는 저속으로 양쪽 리밋에서 멈추는지 먼저 확인한다.
+        /// 축의 리밋 방향(HLS)이 모터 방향(REV)에 맞게 설정되어 있는지 컨트롤러에서 읽어 확인한다. 실패하면 null.
+        /// false 이면 + 이동이 + 쪽 리밋에서 멈추지 않으므로 <see cref="SetMotorDirections"/> 로 다시 적용한다.
         /// </summary>
-        public bool SetMotorDirection(Axis axis, MotorDirection direction)
+        public bool? IsLimitDirectionMatched(Axis axis)
         {
             try
             {
-                CheckReady(new[] { axis });
-                WriteIfDifferent(AxisNo(axis), "rev", (int)direction);
-                _log.Add(T($"{axis} 모터 방향 = {direction} (REV{(int)direction})", $"{axis} motor direction = {direction} (REV{(int)direction})"));
+                CheckConnected();
+                return ReadLimitMatched(AxisNo(axis));
+            }
+            catch (Exception ex)
+            {
+                _errors.Fail(ex);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// 축의 모터 회전 방향(REV)을 바꾼다. <see cref="SetMotorDirections"/> 를 한 축에 쓰는 것과 같다.
+        /// </summary>
+        public bool SetMotorDirection(Axis axis, MotorDirection direction)
+        {
+            return SetMotorDirections(new[] { axis }, new[] { direction });
+        }
+
+        /// <summary>
+        /// 축의 모터 회전 방향(REV)을 바꾼다. 컨트롤러에 저장되는 값이라 다를 때만 쓴다. 조그/이동/원점 찾기 방향이 모두 반대가 된다.
+        /// 리밋 센서는 REV 를 따라 바뀌지 않으므로 리밋 방향(HLS)도 같이 바꿔 + 이동이 + 쪽 리밋에서 멈추게 한다.
+        /// 바뀐 값이 있으면 컨트롤러에 반영되도록 연결을 끊었다가 다시 연결한다 (약 0.5초, 응답 없으면 최대 2초 블록되므로 UI 스레드 밖에서 호출).
+        /// 재연결 중에는 X, Y, Z 모두 통신이 끊기므로 세 축이 모두 멈춰 있어야 한다.
+        /// 위치 카운터의 방향도 반대가 되므로 적용 후에는 <see cref="HomeAsync"/> 로 기계 원점을 다시 찾는다.
+        /// </summary>
+        /// <param name="axes">바꿀 축</param>
+        /// <param name="directions">axes 순서대로의 모터 방향</param>
+        /// <returns>재연결까지 성공하면 true. 재연결에 실패하면 false 이고 연결이 끊긴 상태로 남는다.</returns>
+        public bool SetMotorDirections(Axis[] axes, MotorDirection[] directions)
+        {
+            try
+            {
+                if (axes.Length != directions.Length)
+                {
+                    throw new ArgumentException(T("방향 개수가 축 개수와 다릅니다", "Number of directions does not match number of axes"));
+                }
+                CheckReady(Axes);
+
+                bool changed = false;
+                for (int i = 0; i < axes.Length; i++)
+                {
+                    int axisNo = AxisNo(axes[i]);
+                    int rev = (int)directions[i];
+                    int hls = LimitSwapFor(directions[i]);
+                    changed |= WriteIfDifferent(axisNo, "rev", rev);
+                    changed |= WriteIfDifferent(axisNo, "hls", hls);
+                    _log.Add(T($"{axes[i]} 모터 방향 = {directions[i]} (REV{rev}, HLS{hls})", $"{axes[i]} motor direction = {directions[i]} (REV{rev}, HLS{hls})"));
+                }
+                if (!changed)
+                {
+                    return true;
+                }
+
+                // 실장비(2026-10-28): REV 는 쓰기만 해서는 동작에 반영되지 않고, 연결을 끊었다가 다시 연결해야 반영되었다.
+                _log.Add(T("모터 방향 반영을 위해 다시 연결합니다", "Reconnecting to apply motor direction"));
+                string host = _host;
+                Disconnect();
+                Thread.Sleep(ReconnectDelayMs);
+                if (!Connect(host))
+                {
+                    return false;
+                }
+                _log.Add(T("모터 방향 적용 완료 - 위치 방향이 바뀌었으므로 기계 원점 찾기를 다시 하십시오",
+                    "Motor direction applied - position direction changed, run homing again"));
                 return true;
             }
             catch (Exception ex)
@@ -626,13 +697,56 @@ namespace ValidationStage.Devices
             return int.Parse(match.Groups[1].Value);
         }
 
-        private void WriteIfDifferent(int axisNo, string command, int value)
+        /// <summary>설정값이 다를 때만 쓴다. 썼으면 true.</summary>
+        private bool WriteIfDifferent(int axisNo, string command, int value)
         {
             if (ReadSetting(axisNo, command) == value)
             {
-                return;
+                return false;
             }
             ExpectOk(Query($"{axisNo}{command}{value}"));
+            return true;
+        }
+
+        /// <summary>모터 방향에 맞는 리밋 방향 설정 (HLS 0 = 현재 방향, 1 = LR 리밋 전환, 매뉴얼 9.1.9).</summary>
+        private static int LimitSwapFor(MotorDirection direction)
+        {
+            return direction == LimitVerifiedDirection ? 0 : 1;
+        }
+
+        /// <summary>REV, HLS 를 읽어 리밋 방향이 모터 방향에 맞는지 본다. 읽지 못하면 예외.</summary>
+        private bool ReadLimitMatched(int axisNo)
+        {
+            int? rev = ReadSetting(axisNo, "rev");
+            int? hls = ReadSetting(axisNo, "hls");
+            if ((rev != 0 && rev != 1) || (hls != 0 && hls != 1))
+            {
+                throw new DeviceException(T($"축 {axisNo} REV/HLS 응답을 해석하지 못했습니다", $"Could not parse axis {axisNo} REV/HLS reply"));
+            }
+            return hls.Value == LimitSwapFor((MotorDirection)rev.Value);
+        }
+
+        /// <summary>
+        /// 연결 직후 리밋 방향이 모터 방향과 어긋난 축이 있으면 경고 로그를 남긴다 (예: 다른 프로그램에서 REV 만 바꾼 경우).
+        /// 확인 실패는 연결을 막지 않는다.
+        /// </summary>
+        private void WarnLimitMismatch()
+        {
+            foreach (Axis axis in Axes)
+            {
+                try
+                {
+                    if (!ReadLimitMatched(AxisNo(axis)))
+                    {
+                        _log.Add(T($"경고: {axis} 리밋 방향(HLS)이 모터 방향(REV)과 맞지 않아 리밋에서 멈추지 않을 수 있습니다 - [모터 방향]에서 다시 적용하십시오",
+                            $"Warning: {axis} limit direction (HLS) does not match motor direction (REV) - the axis may not stop at the limit. Re-apply the motor direction"));
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _log.Add(T($"{axis} 리밋 방향 확인 실패: {ex.Message}", $"{axis} limit direction check failed: {ex.Message}"));
+                }
+            }
         }
 
         /// <summary>설정값 하나를 조회한다. 응답을 해석하지 못하면 null.</summary>
@@ -844,6 +958,7 @@ namespace ValidationStage.Devices
                 // STATUS 비트 (매뉴얼 9.3.2, 문자열 오른쪽 끝이 bit0):
                 // bit1 드라이버 에러, bit3 0=동작 중/1=정지, bit9 과열 에러, bit12 CW 리밋, bit13 CCW 리밋
                 // 실장비 확인(2026-09-30): CCW 리밋(bit13)이 + 방향, CW 리밋(bit12)이 - 방향 (REV=1 설정)
+                // REV0 + HLS1 에서도 같다고 본다 (리밋 비트가 HLS 전환 후의 논리 리밋을 보여 준다는 가정 - 장비 확인 필요)
                 lock (_statusLock)
                 {
                     AxisStatus status = _statuses.FirstOrDefault(s => s.Axis == axis);

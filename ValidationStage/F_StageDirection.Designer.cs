@@ -47,13 +47,13 @@ namespace ValidationStage
             //
             this._currentHeader.Location = new System.Drawing.Point(60, 14);
             this._currentHeader.Name = "_currentHeader";
-            this._currentHeader.Size = new System.Drawing.Size(110, 20);
+            this._currentHeader.Size = new System.Drawing.Size(190, 20);
             this._currentHeader.TabIndex = 1;
             this._currentHeader.Text = "현재 설정";
             //
             // _newHeader
             //
-            this._newHeader.Location = new System.Drawing.Point(180, 14);
+            this._newHeader.Location = new System.Drawing.Point(260, 14);
             this._newHeader.Name = "_newHeader";
             this._newHeader.Size = new System.Drawing.Size(130, 20);
             this._newHeader.TabIndex = 2;
@@ -72,7 +72,7 @@ namespace ValidationStage
             //
             this._xCurrentLabel.Location = new System.Drawing.Point(60, 45);
             this._xCurrentLabel.Name = "_xCurrentLabel";
-            this._xCurrentLabel.Size = new System.Drawing.Size(110, 20);
+            this._xCurrentLabel.Size = new System.Drawing.Size(190, 20);
             this._xCurrentLabel.TabIndex = 4;
             this._xCurrentLabel.Text = "-";
             //
@@ -82,7 +82,7 @@ namespace ValidationStage
             this._xCombo.Items.AddRange(new object[] {
             "CCW (REV0)",
             "CW (REV1)"});
-            this._xCombo.Location = new System.Drawing.Point(180, 42);
+            this._xCombo.Location = new System.Drawing.Point(260, 42);
             this._xCombo.Name = "_xCombo";
             this._xCombo.Size = new System.Drawing.Size(130, 23);
             this._xCombo.TabIndex = 5;
@@ -100,7 +100,7 @@ namespace ValidationStage
             //
             this._yCurrentLabel.Location = new System.Drawing.Point(60, 77);
             this._yCurrentLabel.Name = "_yCurrentLabel";
-            this._yCurrentLabel.Size = new System.Drawing.Size(110, 20);
+            this._yCurrentLabel.Size = new System.Drawing.Size(190, 20);
             this._yCurrentLabel.TabIndex = 7;
             this._yCurrentLabel.Text = "-";
             //
@@ -110,7 +110,7 @@ namespace ValidationStage
             this._yCombo.Items.AddRange(new object[] {
             "CCW (REV0)",
             "CW (REV1)"});
-            this._yCombo.Location = new System.Drawing.Point(180, 74);
+            this._yCombo.Location = new System.Drawing.Point(260, 74);
             this._yCombo.Name = "_yCombo";
             this._yCombo.Size = new System.Drawing.Size(130, 23);
             this._yCombo.TabIndex = 8;
@@ -128,7 +128,7 @@ namespace ValidationStage
             //
             this._zCurrentLabel.Location = new System.Drawing.Point(60, 109);
             this._zCurrentLabel.Name = "_zCurrentLabel";
-            this._zCurrentLabel.Size = new System.Drawing.Size(110, 20);
+            this._zCurrentLabel.Size = new System.Drawing.Size(190, 20);
             this._zCurrentLabel.TabIndex = 10;
             this._zCurrentLabel.Text = "-";
             //
@@ -138,7 +138,7 @@ namespace ValidationStage
             this._zCombo.Items.AddRange(new object[] {
             "CCW (REV0)",
             "CW (REV1)"});
-            this._zCombo.Location = new System.Drawing.Point(180, 106);
+            this._zCombo.Location = new System.Drawing.Point(260, 106);
             this._zCombo.Name = "_zCombo";
             this._zCombo.Size = new System.Drawing.Size(130, 23);
             this._zCombo.TabIndex = 11;
@@ -148,9 +148,9 @@ namespace ValidationStage
             this._noteLabel.ForeColor = System.Drawing.Color.Firebrick;
             this._noteLabel.Location = new System.Drawing.Point(16, 142);
             this._noteLabel.Name = "_noteLabel";
-            this._noteLabel.Size = new System.Drawing.Size(300, 36);
+            this._noteLabel.Size = new System.Drawing.Size(380, 36);
             this._noteLabel.TabIndex = 12;
-            this._noteLabel.Text = "컨트롤러에 저장됩니다. 바꾼 뒤에는 저속으로 양쪽 리밋에서 멈추는지 먼저 확인하세요.";
+            this._noteLabel.Text = "컨트롤러에 저장되고 리밋 방향도 같이 바뀝니다. 적용하면 자동으로 다시 연결하며, 적용 후에는 기계 원점 찾기를 다시 하세요.";
             //
             // _readButton
             //
@@ -164,7 +164,7 @@ namespace ValidationStage
             //
             // _applyButton
             //
-            this._applyButton.Location = new System.Drawing.Point(150, 186);
+            this._applyButton.Location = new System.Drawing.Point(230, 186);
             this._applyButton.Name = "_applyButton";
             this._applyButton.Size = new System.Drawing.Size(80, 26);
             this._applyButton.TabIndex = 14;
@@ -175,7 +175,7 @@ namespace ValidationStage
             // _closeButton
             //
             this._closeButton.DialogResult = System.Windows.Forms.DialogResult.Cancel;
-            this._closeButton.Location = new System.Drawing.Point(236, 186);
+            this._closeButton.Location = new System.Drawing.Point(316, 186);
             this._closeButton.Name = "_closeButton";
             this._closeButton.Size = new System.Drawing.Size(80, 26);
             this._closeButton.TabIndex = 15;
@@ -187,7 +187,7 @@ namespace ValidationStage
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.CancelButton = this._closeButton;
-            this.ClientSize = new System.Drawing.Size(332, 226);
+            this.ClientSize = new System.Drawing.Size(412, 226);
             this.Controls.Add(this._axisHeader);
             this.Controls.Add(this._currentHeader);
             this.Controls.Add(this._newHeader);
