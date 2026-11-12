@@ -52,10 +52,11 @@ namespace ValidationStage
             _speedCombo.SelectedIndex = 0;
             _speedCombo.SelectedIndexChanged += (s, e) => ApplySpeed(_speedCombo.SelectedIndex);
 
-            // 기계 원점 찾는 방향: 기본은 모두 (-)리밋 방향 (콤보 순서 = HomeDirection 값)
-            _stageHomeDirXCombo.SelectedIndex = (int)HomeDirection.Negative;
-            _stageHomeDirYCombo.SelectedIndex = (int)HomeDirection.Negative;
-            _stageHomeDirZCombo.SelectedIndex = (int)HomeDirection.Negative;
+            // 기계 원점 찾는 방향: StageHost.txt 에 저장된 값으로 시작하고 (없으면 (-)리밋 방향, 콤보 순서 = HomeDirection 값),
+            // 바꿀 때마다 저장한다.
+            BindStageHomeDirection(Axis.X, _stageHomeDirXCombo);
+            BindStageHomeDirection(Axis.Y, _stageHomeDirYCombo);
+            BindStageHomeDirection(Axis.Z, _stageHomeDirZCombo);
 
             BindAxis(Axis.X, _xMinusButton, _xPlusButton, _xPosLabel, _xStatusLabel);
             BindAxis(Axis.Y, _yMinusButton, _yPlusButton, _yPosLabel, _yStatusLabel);
@@ -144,6 +145,16 @@ namespace ValidationStage
                 }
                 homeBtn.Enabled = true;
             };
+        }
+
+        /// <summary>
+        /// "찾는 방향" 콤보 하나를 연결한다: 저장된 방향으로 시작하고, 바꾸면 ValidationSystem 이 StageHost.txt 에 저장한다.
+        /// </summary>
+        private void BindStageHomeDirection(Axis axis, ComboBox dirCombo)
+        {
+            // SelectedIndexChanged 연결 전에 초기값을 넣어 시작할 때 저장되지 않게 한다.
+            dirCombo.SelectedIndex = (int)_system.GetStageHomeDirection(axis);
+            dirCombo.SelectedIndexChanged += (s, e) => _system.SetStageHomeDirection(axis, (HomeDirection)dirCombo.SelectedIndex);
         }
 
         /// <summary>

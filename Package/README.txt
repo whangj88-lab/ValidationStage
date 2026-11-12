@@ -89,6 +89,8 @@ system.DisconnectAll();
 - Motorized Stage 는 컨트롤러 전원을 켜면 위치가 0 부터 시작합니다. 필요하면 HomeStageAsync(기계 원점 찾기)를 먼저 하십시오.
   찾는 방향은 축별로 지정합니다 (기본 (-)리밋 방향). 예: HomeStageAsync(HomeDirection.Negative, HomeDirection.Negative, HomeDirection.Positive)
   한 축만 찾을 때는 HomeStageAxisAsync(Axis.Z, HomeDirection.Positive)
+  찾는 방향은 SetStageHomeDirection(axis, direction) 으로 StageHost.txt 에 저장해 두고 GetStageHomeDirection(axis) 로
+  다시 읽을 수 있습니다 (저장만 하며 원점 찾기에 자동으로 쓰이지는 않음 - 읽은 값을 HomeStageAsync 에 넘기십시오).
 - 스테이지 축의 모터 회전 방향은 Stage.GetMotorDirection(axis) / Stage.SetMotorDirections(axes, directions) 로
   읽고 바꿉니다 (컨트롤러에 저장됨, 한 축만 바꿀 때는 SetMotorDirection(axis, MotorDirection.Ccw 또는 Cw)).
   리밋 방향(HLS)도 같이 바뀌고, 컨트롤러에 반영되도록 스테이지 연결을 자동으로 끊었다가 다시 연결합니다 (X, Y, Z 모두 정지 상태에서 호출).
@@ -103,3 +105,4 @@ Sample\ValidationStage.sln 을 Visual Studio 2019 이상에서 열고 x64 로 �
 (Visual Studio 설치 시 ".NET 데스크톱 개발" 워크로드와 .NET Framework 4.8 대상 팩이 필요합니다)
 F_Main.cs 가 위 사용법을 모두 보여 줍니다 (연결, 저속 설정, 조그/이동/정지, 원점, 상태 표시, 프로브 읽기).
 예제가 쓰는 설정 파일(StageHost.txt, HexapodHost.txt, ProbeLabels.txt)은 exe 폴더에 자동으로 만들어집니다.
+(StageHost.txt 에는 스테이지 주소와 축별 원점 찾는 방향이 "Host=..." / "HomeDirX=Negative" 형식으로 들어갑니다)

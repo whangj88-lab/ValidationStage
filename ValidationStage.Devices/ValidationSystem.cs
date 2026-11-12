@@ -11,10 +11,16 @@ namespace ValidationStage.Devices
     /// Validation Stage 장비 전체 (Motorized Stage + Hexapod + Probe). 보통 이 클래스 하나만 만들어 쓴다.
     /// 제어 컨셉: X, Y, Z 는 <see cref="Stage"/>, TX, TY, TZ 는 <see cref="Hexapod"/> 가 담당하며, 축을 받는 함수는 자동으로 나눠 보낸다.
     /// 장비 전용 기능(좌표계, 프로브 스캔/읽기 등)은 <see cref="Stage"/>, <see cref="Hexapod"/>, <see cref="Probe"/> 를 직접 호출한다.
-    /// 연결 주소는 exe 폴더의 StageHost.txt, HexapodHost.txt 에 저장된다.
+    /// 연결 주소는 exe 폴더의 StageHost.txt, HexapodHost.txt 에 저장된다 (StageHost.txt 에는 스테이지 원점 찾는 방향도 함께 저장).
     /// </summary>
     public class ValidationSystem
     {
+        /// <summary>장비 객체를 만들고 exe 폴더의 설정 파일(StageHost.txt)을 읽는다. 장비 연결은 하지 않는다.</summary>
+        public ValidationSystem()
+        {
+            LoadStageSettings();
+        }
+
         /// <summary>Motorized Stage (X, Y, Z)</summary>
         public MotorizedStage Stage { get; } = new MotorizedStage();
 
@@ -34,7 +40,11 @@ namespace ValidationStage.Devices
         private static readonly string HexapodHostFile = SettingPath("HexapodHost.txt");
 
         /// <summary>마지막으로 연결에 성공한 스테이지 주소 (StageHost.txt). 저장된 적 없으면 컨트롤러 기본 IP "192.168.0.123".</summary>
-        public string StageHost { get; private set; } = LoadConnectionSetting(StageHostFile, "192.168.0.123");
+        public string StageHost { get; private set; } = "192.168.0.123";
+
+        // 스테이지 축별 원점 찾는 방향 (StageHost.txt 의 HomeDirX/Y/Z). 기본은 (−)방향.
+        private readonly Dictionary<Axis, HomeDirection> _stageHomeDirections = MotorizedStage.Axes
+            .ToDictionary(axis => axis, axis => HomeDirection.Negative);
 
         /// <summary>마지막으로 연결에 성공한 헥사포드 주소 (HexapodHost.txt). 저장된 적 없으면 "127.0.0.1".</summary>
         public string HexapodHost { get; private set; } = LoadConnectionSetting(HexapodHostFile, "127.0.0.1");
@@ -50,7 +60,7 @@ namespace ValidationStage.Devices
                 return false;
             }
             StageHost = host;
-            SaveConnectionSetting(StageHostFile, host);
+            SaveStageSettings();
             return true;
         }
 
@@ -234,6 +244,31 @@ namespace ValidationStage.Devices
             return Track(await Stage.HomeAsync(new[] { axis }, new[] { direction }), Stage.LastError);
         }
 
+        /// <summary>
+        /// 저장된 스테이지 원점 찾는 방향 (StageHost.txt). 저장된 적 없으면 (−)방향.
+        /// 원점 찾기에 자동으로 쓰이지는 않으므로 <see cref="HomeStageAsync"/> 등에 넘겨서 쓴다.
+        /// </summary>
+        /// <param name="axis">X, Y, Z 중 하나 (그 외 축은 (−)방향을 돌려준다)</param>
+        public HomeDirection GetStageHomeDirection(Axis axis)
+        {
+            return _stageHomeDirections.TryGetValue(axis, out HomeDirection direction) ? direction : HomeDirection.Negative;
+        }
+
+        /// <summary>스테이지 원점 찾는 방향을 정하고 StageHost.txt 에 저장한다 (장비로는 보내지 않는다).</summary>
+        /// <param name="axis">X, Y, Z 중 하나</param>
+        /// <param name="direction">찾는 방향</param>
+        public bool SetStageHomeDirection(Axis axis, HomeDirection direction)
+        {
+            if (!_stageHomeDirections.ContainsKey(axis))
+            {
+                LastError = new DeviceError(0, T($"{axis} 축은 스테이지 축이 아닙니다", $"{axis} is not a stage axis"));
+                return false;
+            }
+            _stageHomeDirections[axis] = direction;
+            SaveStageSettings();
+            return true;
+        }
+
         /// <summary>스테이지 현재 위치를 원점(0)으로 설정한다.</summary>
         public bool SetStageZero()
         {
@@ -301,6 +336,54 @@ namespace ValidationStage.Devices
         private static void SaveConnectionSetting(string filePath, string value)
         {
             try { File.WriteAllText(filePath, value); } catch { }
+        }
+
+        // StageHost.txt 형식 (한 줄에 "키=값"):
+        //   Host=192.168.0.123
+        //   HomeDirX=Negative   (HomeDirY, HomeDirZ 도 같은 형식, Negative / Positive)
+        // 예전 형식(주소 한 줄만, '=' 없음)도 주소로 읽는다 - 다음 저장 때 새 형식으로 바뀐다.
+        private void LoadStageSettings()
+        {
+            try
+            {
+                if (!File.Exists(StageHostFile))
+                {
+                    return;
+                }
+                foreach (string rawLine in File.ReadAllLines(StageHostFile))
+                {
+                    string line = rawLine.Trim();
+                    int eq = line.IndexOf('=');
+                    if (eq < 0)
+                    {
+                        if (line.Length > 0)
+                        {
+                            StageHost = line;
+                        }
+                        continue;
+                    }
+                    string key = line.Substring(0, eq).Trim();
+                    string value = line.Substring(eq + 1).Trim();
+                    if (key == "Host" && value.Length > 0)
+                    {
+                        StageHost = value;
+                    }
+                    else if (key.StartsWith("HomeDir") && Enum.TryParse(key.Substring("HomeDir".Length), out Axis axis)
+                        && _stageHomeDirections.ContainsKey(axis)
+                        && Enum.TryParse(value, out HomeDirection direction) && Enum.IsDefined(typeof(HomeDirection), direction))
+                    {
+                        _stageHomeDirections[axis] = direction;
+                    }
+                }
+            }
+            catch { }
+        }
+
+        private void SaveStageSettings()
+        {
+            var lines = new List<string> { "Host=" + StageHost };
+            lines.AddRange(_stageHomeDirections.Select(kv => $"HomeDir{kv.Key}={kv.Value}"));
+            try { File.WriteAllLines(StageHostFile, lines); } catch { }
         }
 
         #endregion

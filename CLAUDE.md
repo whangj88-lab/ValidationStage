@@ -147,7 +147,7 @@ the old stage comes back — it would need porting to the DLL's style).
   approach). Buttons: [기계 원점 찾기] → `HomeAsync` = `hm0` on X,Y,Z
   (toward the − limit by default; confirm dialog first; **per-axis direction** added 2026-10-27: `HomeDirection`
   Negative/Positive → `hm0`/`hm1` (manual p.28: HM0 = −Limit, HM1 = +Limit), `HomeStageAsync(x, y, z)`, UI combos
-  "찾는 방향" X/Y/Z, not persisted (default (−) each launch). On hardware, `hm1` alone still searched toward − (user,
+  "찾는 방향" X/Y/Z, saved in `StageHost.txt` (added 2026-11-11, user chose this over a separate file): `ValidationSystem.GetStageHomeDirection`/`SetStageHomeDirection` (save only, not applied to `HomeStageAsync` automatically), file is now `Host=...` + `HomeDirX/Y/Z=Negative|Positive` lines, the old one-line host format is still read; the sample writes on every combo change, default (−). On hardware, `hm1` alone still searched toward − (user,
   2026-10-27), so `HomeAsync` now also writes `HME` (stored in flash, write-if-different) to match: (−) = `hme1` (CW,
   the stored default; CW limit = −), (+) = `hme0` (CCW), and logs "HMEx, HMx" per axis — **hypothesis, being tested
   per axis by the user**. Per-axis homing: a [원점] column (9th) in the stage axis table → `HomeStageAxisAsync(axis,
