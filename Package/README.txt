@@ -86,6 +86,11 @@ system.DisconnectAll();
   ReadAll 이 Busy 를 돌려주면 다른 작업이 버스를 쓰는 중이므로 그 주기만 건너뜁니다.
 - Hexapod 컨트롤러 전원을 켠 뒤에는 레퍼런스(Hexapod.ReferenceAsync)를 먼저 해야 움직입니다.
   (안 하면 LastError.Code = 5 "unreferenced")
+- Hexapod TX, TY, TZ 에는 DLL 소프트웨어 리밋이 있습니다 (단위 arcmin, 좌표계별, 저장한 적 없는 좌표계는 사용 + ±300 arcmin).
+  이동(MoveAsync/MoveAbsAsync)은 목표가 활성 좌표계의 리밋을 벗어나면 명령 전체를 보내지 않고 false 를 돌려주며,
+  조그(JogRun)는 리밋에서 멈춥니다. 읽기 Hexapod.GetSoftLimit("TILTEDCS"), 설정+저장(HexapodHost.txt)
+  system.SetHexapodSoftLimit("TILTEDCS", new HexapodSoftLimit { Min = new[] { -100.0, -100, -100 }, Max = new[] { 100.0, 100, 100 } }).
+  DLL 을 거치지 않는 이동(PIMikroMove 등)과 레퍼런스(FRF)는 검사하지 않습니다.
 - Motorized Stage 는 컨트롤러 전원을 켜면 위치가 0 부터 시작합니다. 필요하면 HomeStageAsync(기계 원점 찾기)를 먼저 하십시오.
   찾는 방향은 축별로 지정합니다 (기본 (-)리밋 방향). 예: HomeStageAsync(HomeDirection.Negative, HomeDirection.Negative, HomeDirection.Positive)
   한 축만 찾을 때는 HomeStageAxisAsync(Axis.Z, HomeDirection.Positive)
@@ -105,4 +110,5 @@ Sample\ValidationStage.sln 을 Visual Studio 2019 이상에서 열고 x64 로 �
 (Visual Studio 설치 시 ".NET 데스크톱 개발" 워크로드와 .NET Framework 4.8 대상 팩이 필요합니다)
 F_Main.cs 가 위 사용법을 모두 보여 줍니다 (연결, 저속 설정, 조그/이동/정지, 원점, 상태 표시, 프로브 읽기).
 예제가 쓰는 설정 파일(StageHost.txt, HexapodHost.txt, ProbeLabels.txt)은 exe 폴더에 자동으로 만들어집니다.
-(StageHost.txt 에는 스테이지 주소와 축별 원점 찾는 방향이 "Host=..." / "HomeDirX=Negative" 형식으로 들어갑니다)
+(StageHost.txt 에는 스테이지 주소와 축별 원점 찾는 방향이 "Host=..." / "HomeDirX=Negative" 형식으로,
+ HexapodHost.txt 에는 헥사포드 주소와 소프트웨어 리밋이 "Host=..." / "SoftLimit.TILTEDCS.TX=-300,300" 형식으로 들어갑니다)

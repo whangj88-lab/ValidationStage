@@ -78,6 +78,12 @@
     <Compile Include="F_CoordSystem.Designer.cs">
       <DependentUpon>F_CoordSystem.cs</DependentUpon>
     </Compile>
+    <Compile Include="F_HexapodSoftLimit.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="F_HexapodSoftLimit.Designer.cs">
+      <DependentUpon>F_HexapodSoftLimit.cs</DependentUpon>
+    </Compile>
     <Compile Include="F_StageDirection.cs">
       <SubType>Form</SubType>
     </Compile>

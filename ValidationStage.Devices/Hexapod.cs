@@ -47,6 +47,9 @@ namespace ValidationStage.Devices
         private const double FallbackJogSpanDeg = 30.0;
         private const double MinJogDistanceDeg = 0.001;
 
+        // 소프트웨어 리밋 비교 여유 (arcmin) - 리밋 값 그대로의 목표가 계산 오차로 거부되지 않게.
+        private const double SoftLimitTolerance = 1e-6;
+
         private int _deviceId = -1;
         private string[] _piAxes = new string[0];
         private AxisStatus[] _statuses = new AxisStatus[0];
@@ -58,6 +61,10 @@ namespace ValidationStage.Devices
 
         // qTMN/qTMX 가 이 컨트롤러 좌표계에서 미지원(GCS 551)이면 true - 다시 묻지 않는다.
         private bool _limitQueryUnsupported;
+
+        // 좌표계 이름 → 소프트웨어 리밋. 없는 좌표계는 기본값(±300 arcmin). 저장은 ValidationSystem 이 HexapodHost.txt 에 한다.
+        private readonly Dictionary<string, HexapodSoftLimit> _softLimits = new Dictionary<string, HexapodSoftLimit>();
+        private readonly object _softLimitLock = new object();
 
         private readonly LogBuffer _log = new LogBuffer("Hexapod");
         private readonly DeviceErrors _errors;
@@ -183,6 +190,7 @@ namespace ValidationStage.Devices
         /// <summary>
         /// 이동하고 끝날 때까지 기다린다. positions 단위 arcmin (넘긴 배열은 바뀌지 않는다).
         /// 레퍼런스가 안 잡혀 있으면 실패하고 <see cref="LastError"/> 의 Code 가 5 다.
+        /// 목표가 활성 좌표계의 소프트웨어 리밋(<see cref="GetSoftLimit"/>)을 벗어나면 명령을 보내지 않고 실패한다.
         /// </summary>
         /// <param name="axes">TX, TY, TZ 중 이동할 축</param>
         /// <param name="positions">axes 순서대로의 목표 (arcmin)</param>
@@ -205,6 +213,19 @@ namespace ValidationStage.Devices
                 string sAxes = string.Join(" ", axes.Select(axis => PiAxisNames[(int)axis]));
                 double[] degrees = positions.Select(arcmin => arcmin / -60).ToArray();   // arcmin -> deg
 
+                // 소프트웨어 리밋: 목표(상대 이동이면 현재 위치 + 이동량) 중 하나라도 벗어나면 명령 전체를 보내지 않는다.
+                double[] targets = positions;
+                if (!isAbsolute)
+                {
+                    double[] current = new double[axes.Length];
+                    if (PI_GCS2.qPOS(_deviceId, sAxes, current) == PI_RESULT_FAILURE)
+                    {
+                        throw GcsFail(T("이동 명령: 위치 조회 실패", "Move: failed to read positions"));
+                    }
+                    targets = current.Select((deg, i) => deg * -60 + positions[i]).ToArray();
+                }
+                CheckSoftLimit(axes, targets);
+
                 int ret = isAbsolute
                     ? PI_GCS2.MOV(_deviceId, sAxes, degrees)
                     : PI_GCS2.MVR(_deviceId, sAxes, degrees);
@@ -226,6 +247,7 @@ namespace ValidationStage.Devices
         /// <summary>
         /// 누르고 있는 동안 연속 이동을 시작한다. <see cref="JogStop"/> 으로 멈춘다 (멈추지 않으면 이동 한계까지 간다).
         /// dir = true 가 표시값(arcmin) 증가 방향. PI 헥사포드에는 연속 조그 명령이 없어서, 갈 수 있는 한계(qVMO 로 탐색)까지 MOV 를 보낸다.
+        /// 활성 좌표계의 소프트웨어 리밋이 있으면 그 값에서 멈춘다.
         /// </summary>
         public bool JogRun(Axis axis, bool dir)
         {
@@ -267,6 +289,23 @@ namespace ValidationStage.Devices
                 if (limitRet == PI_RESULT_FAILURE)
                 {
                     limit[0] = current[0] + (dir ? -FallbackJogSpanDeg : FallbackJogSpanDeg);
+                }
+
+                // 소프트웨어 리밋: 조그 끝을 리밋까지로 줄인다 (리밋에서 정확히 멈춘다). 이미 리밋에 닿았으면 거부.
+                string cs;
+                HexapodSoftLimit softLimit = GetActiveSoftLimit(out cs);
+                if (softLimit.Enabled)
+                {
+                    int index = Array.IndexOf(Axes, axis);
+                    double boundArcmin = dir ? softLimit.Max[index] : softLimit.Min[index];
+                    double currentArcmin = current[0] * -60;
+                    if (dir ? currentArcmin >= boundArcmin - MinJogDistanceDeg * 60 : currentArcmin <= boundArcmin + MinJogDistanceDeg * 60)
+                    {
+                        throw new DeviceException(T($"{axis}: 소프트 리밋 {boundArcmin:0.###} arcmin (좌표계 {cs}) - 더 갈 수 없습니다",
+                            $"{axis}: software limit {boundArcmin:0.###} arcmin (coordinate system {cs}) - cannot move further"));
+                    }
+                    double boundDeg = boundArcmin / -60;
+                    limit[0] = dir ? Math.Max(limit[0], boundDeg) : Math.Min(limit[0], boundDeg);   // + 방향 = deg 감소
                 }
 
                 double fullDistance = limit[0] - current[0];
@@ -450,6 +489,107 @@ namespace ValidationStage.Devices
             {
                 _errors.Fail(ex);
                 return false;
+            }
+        }
+
+        #endregion
+
+        #region 소프트웨어 리밋
+
+        // 좌표계마다 따로 둔다 - 같은 arcmin 값도 활성 좌표계가 바뀌면 플랫폼의 다른 자세가 되기 때문.
+        // 이동(MoveAsync)/조그(JogRun) 때마다 활성 좌표계(KEN?)를 읽어 그 좌표계의 리밋으로 검사한다.
+        // 레퍼런스(FRF)와 다른 프로그램(PIMikroMove 등)의 이동은 검사하지 않는다.
+
+        /// <summary>
+        /// 좌표계 하나의 소프트웨어 리밋 복사본 (arcmin). 저장된 값이 없으면 기본값 (사용, ±300 arcmin).
+        /// 바꾸고 저장하려면 <see cref="ValidationSystem.SetHexapodSoftLimit"/> 를 쓴다.
+        /// </summary>
+        /// <param name="coordSystem">좌표계 이름 (예: "ZERO", "TILTEDCS")</param>
+        public HexapodSoftLimit GetSoftLimit(string coordSystem)
+        {
+            lock (_softLimitLock)
+            {
+                return coordSystem != null && _softLimits.TryGetValue(coordSystem, out HexapodSoftLimit limit)
+                    ? limit.Clone()
+                    : new HexapodSoftLimit();
+            }
+        }
+
+        /// <summary>값이 저장된 좌표계 이름과 리밋 (ValidationSystem 의 파일 저장용).</summary>
+        internal List<KeyValuePair<string, HexapodSoftLimit>> GetStoredSoftLimits()
+        {
+            lock (_softLimitLock)
+            {
+                return _softLimits.Select(kv => new KeyValuePair<string, HexapodSoftLimit>(kv.Key, kv.Value.Clone())).ToList();
+            }
+        }
+
+        /// <summary>좌표계 하나의 리밋을 정한다 (메모리만). 값이 잘못됐으면 false + LastError.</summary>
+        internal bool SetSoftLimit(string coordSystem, HexapodSoftLimit limit)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(coordSystem) || !Regex.IsMatch(coordSystem, "^[A-Za-z0-9_]+$"))
+                {
+                    throw new DeviceException(T($"소프트 리밋: 좌표계 이름이 잘못됐습니다 ({coordSystem})", $"Software limit: invalid coordinate system name ({coordSystem})"));
+                }
+                if (limit?.Min == null || limit.Max == null || limit.Min.Length != Axes.Length || limit.Max.Length != Axes.Length)
+                {
+                    throw new DeviceException(T("소프트 리밋: Min/Max 는 TX, TY, TZ 3개 값이어야 합니다", "Software limit: Min/Max must have 3 values (TX, TY, TZ)"));
+                }
+                for (int i = 0; i < Axes.Length; i++)
+                {
+                    if (double.IsNaN(limit.Min[i]) || double.IsNaN(limit.Max[i]) || double.IsInfinity(limit.Min[i])
+                        || double.IsInfinity(limit.Max[i]) || limit.Min[i] >= limit.Max[i])
+                    {
+                        throw new DeviceException(T($"소프트 리밋: {Axes[i]} 하한이 상한보다 작아야 합니다 ({limit.Min[i]} ~ {limit.Max[i]})",
+                            $"Software limit: {Axes[i]} min must be less than max ({limit.Min[i]} ~ {limit.Max[i]})"));
+                    }
+                }
+                lock (_softLimitLock)
+                {
+                    _softLimits[coordSystem] = limit.Clone();
+                }
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _errors.Fail(ex);
+                return false;
+            }
+        }
+
+        /// <summary>활성 좌표계의 리밋. 활성 좌표계를 못 읽으면 예외 (검사 없이 움직이지 않도록).</summary>
+        private HexapodSoftLimit GetActiveSoftLimit(out string coordSystem)
+        {
+            coordSystem = GetActiveUserCoordSystem();
+            if (coordSystem == null)
+            {
+                throw new DeviceException(T("활성 좌표계(KEN?)를 읽지 못해 소프트 리밋을 확인할 수 없습니다",
+                    "Failed to read the active coordinate system (KEN?) - cannot check the software limit"));
+            }
+            return GetSoftLimit(coordSystem);
+        }
+
+        /// <summary>목표(arcmin) 중 하나라도 활성 좌표계의 리밋을 벗어나면 예외.</summary>
+        private void CheckSoftLimit(Axis[] axes, double[] targets)
+        {
+            HexapodSoftLimit limit = GetActiveSoftLimit(out string cs);
+            if (!limit.Enabled)
+            {
+                return;
+            }
+            for (int i = 0; i < axes.Length; i++)
+            {
+                int index = Array.IndexOf(Axes, axes[i]);
+                double min = limit.Min[index];
+                double max = limit.Max[index];
+                if (targets[i] < min - SoftLimitTolerance || targets[i] > max + SoftLimitTolerance)
+                {
+                    throw new DeviceException(T(
+                        $"소프트 리밋 초과: {axes[i]} 목표 {targets[i]:0.###} arcmin (허용 {min:0.###} ~ {max:0.###}, 좌표계 {cs}) - 이동하지 않았습니다",
+                        $"Software limit exceeded: {axes[i]} target {targets[i]:0.###} arcmin (allowed {min:0.###} ~ {max:0.###}, coordinate system {cs}) - not moved"));
+                }
             }
         }
 

@@ -288,6 +288,24 @@ Framework, nothing extra to deploy; no NuGet). Code in `ValidationStage.Devices/
 - Mouse: drag = orbit, wheel = zoom, double-click = reset view. Rendered against the real hexapod (read-only) and with a
   synthetic tilt; screenshots looked right.
 
+**Hexapod software limit, added 2026-11-12 (user decisions):** checked **in the DLL**, not the controller's
+`NLM`/`PLM`/`SSL` (user chose this over controller limits: the controller's are per CS too, but persistence across power
+cycles, whether user CSs accept NLM, and the error code were all unknown, and deg/sign conversion is error-prone).
+- `HexapodSoftLimit` (Common.cs): `Enabled`, `Min[3]`/`Max[3]` in **arcmin as displayed** (TX,TY,TZ order).
+  **Per coordinate system** (same arcmin = a different pose in another CS — the reason the file-saved hexapod home was
+  removed); a CS with nothing saved uses the default **enabled, ±300 arcmin** (`DefaultLimit`).
+- `Hexapod.GetSoftLimit(cs)` (public, clone), `SetSoftLimit` is **internal** — set via
+  `ValidationSystem.SetHexapodSoftLimit(cs, limit)` so it is always saved. Saved in `HexapodHost.txt`, which became
+  key=value like StageHost.txt: `Host=...`, `SoftLimit.<CS>.Enabled=1`, `SoftLimit.<CS>.TX=min,max` (invariant culture);
+  old one-line host files still load (`ReadSettings` maps a line without `=` to `Host`).
+- Every `MoveAsync`/`JogRun` reads the active CS (`GetActiveUserCoordSystem` = KEN?); if that fails the move is
+  refused (fail closed). `MoveAsync`: target (relative = qPOS + delta) outside → **whole command refused**, nothing sent.
+  `JogRun`: jog end clamped to the limit (stops exactly there); refused if already at/over the limit in that direction;
+  jogging/moving back inward from outside is allowed. FRF, PIMikroMove etc. are not checked.
+- Sample: [소프트 리밋] in the hexapod connection row (after [3D 보기]) → `F_HexapodSoftLimit` (own designer file): CS
+  combo (non-PI CSs, active preselected), 사용 checkbox, min/max per axis, current position (active CS only),
+  [기본값 (±300)], [적용] (warns if the current position is outside). Not yet run on hardware.
+
 **Hexapod reference (FRF), added 2026-10-01:** after the hexapod controller is power-cycled, every move fails with
 GCS error 5 "Unallowable move attempted on unreferenced axis, or move attempted with servo off" (seen on hardware).
 `Hexapod.IsReferenced` (`qFRF` on all 6 axes `X Y Z U V W` — FRF is whole-platform) and
@@ -410,6 +428,13 @@ Log language (2026-10-08): every `AppendLog` text goes through `F_Main.L(ko, en)
 like the DLL's `T()` — so the whole log switches language. UI texts (buttons, labels, grid state, MessageBoxes) stay
 Korean on purpose. Wrap new log lines in `L()` too. .NET/Windows exception texts embedded in messages
 (`ex.Message`, e.g. socket errors) follow the OS language, not `Messages.Language`.
+Not-connected guard (2026-11-13, user request): every stage/hexapod/probe action handler starts with
+`RequireStageConnected()`/`RequireHexapodConnected()`/`RequireProbeConnected()` (or `RequireAxisConnected(axis)` for
+jog/move/stop rows) → log line **and** a "연결 필요" MessageBox. Add it to new action buttons too. [전체 정지]/[전체 정지
+(비상)] only warn when neither motion device is connected (the e-stop is sent before the popup). Probe action buttons
+are therefore no longer disabled while disconnected (only [연결]/[해제] follow the connection state). Not guarded:
+connect/disconnect/scan-IP, the speed combo and home-direction combos (settings), vision correction (it skips an
+unconnected device with a log line by design).
 
 ### Vision correction (sample exe only, added 2026-10-12)
 

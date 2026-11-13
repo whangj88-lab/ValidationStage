@@ -61,6 +61,7 @@
             this._hexapodMoveHomeButton = new System.Windows.Forms.Button();
             this._hexapodCoordSystemButton = new System.Windows.Forms.Button();
             this._hexapod3DButton = new System.Windows.Forms.Button();
+            this._hexapodSoftLimitButton = new System.Windows.Forms.Button();
             this._hexapodConnRow = new System.Windows.Forms.FlowLayoutPanel();
             this._hexapodHostLabel = new System.Windows.Forms.Label();
             this._hexapodHostBox = new System.Windows.Forms.TextBox();
@@ -567,9 +568,19 @@
             this._hexapod3DButton.Text = "3D 보기";
             this._hexapod3DButton.UseVisualStyleBackColor = true;
             this._hexapod3DButton.Click += new System.EventHandler(this.Hexapod3DButton_Click);
-            // 
+            //
+            // _hexapodSoftLimitButton
+            //
+            this._hexapodSoftLimitButton.Location = new System.Drawing.Point(515, 9);
+            this._hexapodSoftLimitButton.Name = "_hexapodSoftLimitButton";
+            this._hexapodSoftLimitButton.Size = new System.Drawing.Size(80, 23);
+            this._hexapodSoftLimitButton.TabIndex = 6;
+            this._hexapodSoftLimitButton.Text = "소프트 리밋";
+            this._hexapodSoftLimitButton.UseVisualStyleBackColor = true;
+            this._hexapodSoftLimitButton.Click += new System.EventHandler(this.HexapodSoftLimitButton_Click);
+            //
             // _hexapodConnRow
-            // 
+            //
             this._hexapodConnRow.Controls.Add(this._hexapodHostLabel);
             this._hexapodConnRow.Controls.Add(this._hexapodHostBox);
             this._hexapodConnRow.Controls.Add(this._hexapodScanButton);
@@ -577,6 +588,7 @@
             this._hexapodConnRow.Controls.Add(this._hexapodDisconnectButton);
             this._hexapodConnRow.Controls.Add(this._hexapodCoordSystemButton);
             this._hexapodConnRow.Controls.Add(this._hexapod3DButton);
+            this._hexapodConnRow.Controls.Add(this._hexapodSoftLimitButton);
             this._hexapodConnRow.Controls.Add(this._hexapodConnLabel);
             this._hexapodConnRow.Dock = System.Windows.Forms.DockStyle.Top;
             this._hexapodConnRow.Location = new System.Drawing.Point(3, 19);
@@ -637,11 +649,11 @@
             // 
             this._hexapodConnLabel.AutoSize = true;
             this._hexapodConnLabel.ForeColor = System.Drawing.Color.Red;
-            this._hexapodConnLabel.Location = new System.Drawing.Point(515, 6);
+            this._hexapodConnLabel.Location = new System.Drawing.Point(601, 6);
             this._hexapodConnLabel.Name = "_hexapodConnLabel";
             this._hexapodConnLabel.Padding = new System.Windows.Forms.Padding(8, 6, 0, 0);
             this._hexapodConnLabel.Size = new System.Drawing.Size(67, 21);
-            this._hexapodConnLabel.TabIndex = 6;
+            this._hexapodConnLabel.TabIndex = 7;
             this._hexapodConnLabel.Text = "연결 안됨";
             // 
             // _stageGroup
@@ -1647,5 +1659,6 @@
         private System.Windows.Forms.Button _hexapodMoveHomeButton;
         private System.Windows.Forms.Button _hexapodCoordSystemButton;
         private System.Windows.Forms.Button _hexapod3DButton;
+        private System.Windows.Forms.Button _hexapodSoftLimitButton;
     }
 }

@@ -100,7 +100,7 @@ namespace ValidationStage
             // 헥사포드 Jog 는 이동 한계까지 MOV 를 보내 두는 방식이라 정지가 빠지면 한계까지 간다.
             // MouseUp 없이 마우스 캡처를 잃는 경우(누른 채 Alt+Tab 등)에도 MouseCaptureChanged 로 정지한다 (한 번만).
             bool jogging = false;
-            void Start(bool dir) { jogging = _system.JogRun(axis, dir); }
+            void Start(bool dir) { jogging = RequireAxisConnected(axis) && _system.JogRun(axis, dir); }
             void Stop() { if (jogging) { jogging = false; _system.JogStop(axis); } }
 
             minusBtn.MouseDown += (s, e) => Start(false);
@@ -120,6 +120,10 @@ namespace ValidationStage
         {
             stopBtn.Click += async (s, e) =>
             {
+                if (!RequireAxisConnected(axis))
+                {
+                    return;
+                }
                 await _system.StopAxisAsync(axis);
             };
         }
@@ -131,6 +135,10 @@ namespace ValidationStage
         {
             homeBtn.Click += async (s, e) =>
             {
+                if (!RequireStageConnected())
+                {
+                    return;
+                }
                 DialogResult answer = MessageBox.Show(
                     $"{axis} 축만 리밋 방향으로 이동해 기계 원점을 찾습니다. ({dirCombo.Text})\n주변에 부딪힐 것이 없는지 확인하셨습니까?",
                     "기계 원점 찾기", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning);
@@ -164,11 +172,53 @@ namespace ValidationStage
         {
             moveBtn.Click += async (s, e) =>
             {
+                if (!RequireAxisConnected(axis))
+                {
+                    return;
+                }
                 moveBtn.Enabled = false;
                 await _system.MoveAbsAsync(axis, (double)targetInput.Value);
                 moveBtn.Enabled = true;
             };
         }
+
+        #region 연결 확인
+
+        // 연결 안 된 장비로 동작하려 하면 로그와 팝업으로 알린다 (true = 연결됨, 계속 진행).
+        private bool RequireStageConnected()
+        {
+            return RequireConnected(_system.Stage.IsConnected, "Stage", "스테이지(Motorized Stage)");
+        }
+
+        private bool RequireHexapodConnected()
+        {
+            return RequireConnected(_system.Hexapod.IsConnected, "Hexapod", "헥사포드(Hexapod)");
+        }
+
+        private bool RequireProbeConnected()
+        {
+            return RequireConnected(_system.Probe.IsConnected, "Probe", "프로브(Probe)");
+        }
+
+        /// <summary>축이 속한 장비(X,Y,Z = 스테이지, TX,TY,TZ = 헥사포드)의 연결을 확인한다.</summary>
+        private bool RequireAxisConnected(Axis axis)
+        {
+            return MotorizedStage.Axes.Contains(axis) ? RequireStageConnected() : RequireHexapodConnected();
+        }
+
+        private bool RequireConnected(bool connected, string tag, string deviceName)
+        {
+            if (connected)
+            {
+                return true;
+            }
+            AppendLog(L($"[{tag}] 연결되어 있지 않습니다 - 먼저 [연결]하세요", $"[{tag}] Not connected - connect first"));
+            MessageBox.Show(this, $"{deviceName}가 연결되어 있지 않습니다.\n먼저 [연결]을 눌러 연결하세요.",
+                "연결 필요", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
+        }
+
+        #endregion
 
         #region UI 이벤트
 
@@ -284,9 +334,8 @@ namespace ValidationStage
 
         private void HexapodCoordSystemButton_Click(object sender, EventArgs e)
         {
-            if (!_system.Hexapod.IsConnected)
+            if (!RequireHexapodConnected())
             {
-                AppendLog(L("[Hexapod] 먼저 [연결]하세요", "[Hexapod] Connect first"));
                 return;
             }
             using (var form = new F_CoordSystem(_system, AppendLog))
@@ -295,12 +344,24 @@ namespace ValidationStage
             }
         }
 
+        /// <summary>[소프트 리밋]: 헥사포드 TX, TY, TZ 소프트웨어 리밋 설정 창 (좌표계별, 활성 좌표계 값으로 이동/조그를 검사).</summary>
+        private void HexapodSoftLimitButton_Click(object sender, EventArgs e)
+        {
+            if (!RequireHexapodConnected())
+            {
+                return;
+            }
+            using (var form = new F_HexapodSoftLimit(_system, AppendLog))
+            {
+                form.ShowDialog(this);
+            }
+        }
+
         /// <summary>[3D 보기]: 헥사포드 3D 창을 띄운다 (비모달 - 띄운 채로 조그하면 자세가 따라 움직인다). 이미 열려 있으면 앞으로.</summary>
         private void Hexapod3DButton_Click(object sender, EventArgs e)
         {
-            if (!_system.Hexapod.IsConnected)
+            if (!RequireHexapodConnected())
             {
-                AppendLog(L("[Hexapod] 먼저 [연결]하세요", "[Hexapod] Connect first"));
                 return;
             }
             if (_hexapod3DForm == null || _hexapod3DForm.IsDisposed)
@@ -322,9 +383,8 @@ namespace ValidationStage
         /// <summary>확인 창을 띄운 뒤 헥사포드 레퍼런스(FRF)를 잡는다. 헥사포드가 레퍼런스 위치(6축 0)로 실제 이동한다.</summary>
         private async Task RunHexapodReferenceAsync()
         {
-            if (!_system.Hexapod.IsConnected)
+            if (!RequireHexapodConnected())
             {
-                AppendLog(L("[Hexapod] 먼저 [연결]하세요", "[Hexapod] Connect first"));
                 return;
             }
             DialogResult answer = MessageBox.Show(
@@ -489,9 +549,8 @@ namespace ValidationStage
         /// <summary>[모터 방향]: 스테이지 X, Y, Z 모터 회전 방향(REV) 설정 창.</summary>
         private void StageDirectionButton_Click(object sender, EventArgs e)
         {
-            if (!_system.Stage.IsConnected)
+            if (!RequireStageConnected())
             {
-                AppendLog(L("[Stage] 먼저 [연결]하세요", "[Stage] Connect first"));
                 return;
             }
             using (var form = new F_StageDirection(_system.Stage, AppendLog))
@@ -502,6 +561,10 @@ namespace ValidationStage
 
         private async void StageFindHomeButton_Click(object sender, EventArgs e)
         {
+            if (!RequireStageConnected())
+            {
+                return;
+            }
             HomeDirection x = (HomeDirection)_stageHomeDirXCombo.SelectedIndex;
             HomeDirection y = (HomeDirection)_stageHomeDirYCombo.SelectedIndex;
             HomeDirection z = (HomeDirection)_stageHomeDirZCombo.SelectedIndex;
@@ -522,6 +585,10 @@ namespace ValidationStage
 
         private void StageSetHomeButton_Click(object sender, EventArgs e)
         {
+            if (!RequireStageConnected())
+            {
+                return;
+            }
             DialogResult answer = MessageBox.Show(
                 "현재 X, Y, Z 위치를 원점(0)으로 설정합니다.\n이전 원점 기준 위치는 사라집니다. 계속하시겠습니까?",
                 "스테이지 원점 설정", MessageBoxButtons.OKCancel, MessageBoxIcon.Question);
@@ -541,6 +608,10 @@ namespace ValidationStage
 
         private async void StageMoveHomeButton_Click(object sender, EventArgs e)
         {
+            if (!RequireStageConnected())
+            {
+                return;
+            }
             _stageMoveHomeButton.Enabled = false;
             await _system.MoveStageToZeroAsync();
             _stageMoveHomeButton.Enabled = true;
@@ -548,19 +619,36 @@ namespace ValidationStage
 
         private async void HexapodMoveHomeButton_Click(object sender, EventArgs e)
         {
+            if (!RequireHexapodConnected())
+            {
+                return;
+            }
             _hexapodMoveHomeButton.Enabled = false;
             await _system.MoveHexapodToZeroAsync();
             _hexapodMoveHomeButton.Enabled = true;
         }
 
+        // 전체 정지는 연결된 장비만 멈추면 되므로, 둘 다 연결 안 됐을 때만 알린다 (비상 정지는 확인 전에 먼저 보낸다).
         private async void StopAllNormalButton_Click(object sender, EventArgs e)
         {
+            if (!RequireAnyMotionConnected())
+            {
+                return;
+            }
             await _system.StopAllAsync();
         }
 
         private async void StopAllButton_Click(object sender, EventArgs e)
         {
-            await _system.EmergencyStopAllAsync();
+            Task stop = _system.EmergencyStopAllAsync();
+            RequireAnyMotionConnected();
+            await stop;
+        }
+
+        private bool RequireAnyMotionConnected()
+        {
+            return _system.Stage.IsConnected || _system.Hexapod.IsConnected
+                || RequireConnected(false, "Stop", "스테이지/헥사포드");
         }
 
         private async void ProbeConnectButton_Click(object sender, EventArgs e)
@@ -603,17 +691,14 @@ namespace ValidationStage
         }
 
         /// <summary>
-        /// 연결 전에는 [연결]만, 연결 후에는 [연결]을 뺀 나머지 버튼만 쓸 수 있게 한다.
+        /// [연결]/[해제]만 연결 상태에 따라 막는다. 읽기/스캔/영점 등 동작 버튼은 스테이지/헥사포드처럼 항상 눌리고,
+        /// 연결 전에 누르면 팝업으로 알린다 (RequireProbeConnected).
         /// </summary>
         private void UpdateProbeButtons()
         {
             bool connected = _system.Probe.IsConnected;
             _probeConnectButton.Enabled = !connected;
             _probeDisconnectButton.Enabled = connected;
-            _probeReadButton.Enabled = connected;
-            _probeScanButton.Enabled = connected;
-            _probeNotifyButton.Enabled = connected;
-            _probeZeroAllButton.Enabled = connected;
         }
 
         private void ProbeReadButton_Click(object sender, EventArgs e)
@@ -624,9 +709,8 @@ namespace ValidationStage
                 AppendLog(L("[Probe] 읽기 중지", "[Probe] Reading stopped"));
                 return;
             }
-            if (!_system.Probe.IsConnected)
+            if (!RequireProbeConnected())
             {
-                AppendLog(L("[Probe] 먼저 [연결]하세요", "[Probe] Connect first"));
                 return;
             }
             StartProbeReading();
@@ -663,23 +747,34 @@ namespace ValidationStage
 
         private async void ProbeScanButton_Click(object sender, EventArgs e)
         {
+            if (!RequireProbeConnected())
+            {
+                return;
+            }
             _probeScanButton.Enabled = false;
             await _system.Probe.ScanAsync();
-            _probeScanButton.Enabled = _system.Probe.IsConnected;
+            _probeScanButton.Enabled = true;
             UpdateProbeListWhileStopped();
         }
 
         private async void ProbeNotifyButton_Click(object sender, EventArgs e)
         {
+            if (!RequireProbeConnected())
+            {
+                return;
+            }
             _probeNotifyButton.Enabled = false;
             await _system.Probe.NotifyAddModuleAsync();
-            // 대기 중 [해제]로 취소됐을 수 있으므로 연결 상태 기준으로 되살린다.
-            _probeNotifyButton.Enabled = _system.Probe.IsConnected;
+            _probeNotifyButton.Enabled = true;
             UpdateProbeListWhileStopped();
         }
 
         private void ProbeZeroAllButton_Click(object sender, EventArgs e)
         {
+            if (!RequireProbeConnected())
+            {
+                return;
+            }
             _system.Probe.ZeroAll();
         }
 
@@ -709,6 +804,10 @@ namespace ValidationStage
                 return;
             }
 
+            if ((e.ColumnIndex == _colZero.Index || e.ColumnIndex == _colRead.Index) && !RequireProbeConnected())
+            {
+                return;
+            }
             if (e.ColumnIndex == _colZero.Index)
             {
                 _system.Probe.Zero(moduleId);

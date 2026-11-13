@@ -85,6 +85,31 @@ namespace ValidationStage.Devices
     }
 
     /// <summary>
+    /// 헥사포드 소프트웨어 리밋 (좌표계 하나 분량). DLL 이 이동/조그 명령을 보내기 전에 검사한다 (컨트롤러의 NLM/PLM 은 쓰지 않음).
+    /// 단위 arcmin, 메인 화면 표시값(활성 좌표계 기준) 그대로. <see cref="Min"/>/<see cref="Max"/> 는 <see cref="Hexapod.Axes"/> (TX, TY, TZ) 순서.
+    /// </summary>
+    public class HexapodSoftLimit
+    {
+        /// <summary>저장된 값이 없는 좌표계에 쓰는 기본 리밋 (±300 arcmin = ±5°).</summary>
+        public const double DefaultLimit = 300;
+
+        /// <summary>리밋 사용 여부. false 면 검사하지 않는다.</summary>
+        public bool Enabled { get; set; } = true;
+
+        /// <summary>축별 하한 (arcmin, TX, TY, TZ 순서)</summary>
+        public double[] Min { get; set; } = { -DefaultLimit, -DefaultLimit, -DefaultLimit };
+
+        /// <summary>축별 상한 (arcmin, TX, TY, TZ 순서)</summary>
+        public double[] Max { get; set; } = { DefaultLimit, DefaultLimit, DefaultLimit };
+
+        /// <summary>복사본</summary>
+        public HexapodSoftLimit Clone()
+        {
+            return new HexapodSoftLimit { Enabled = Enabled, Min = (double[])Min?.Clone(), Max = (double[])Max?.Clone() };
+        }
+    }
+
+    /// <summary>
     /// 마지막으로 실패한 명령의 원인. 각 장비의 <c>LastError</c> 로 조회한다.
     /// 명령이 성공해도 지워지지 않으므로, 함수가 false/null 을 돌려줬을 때만 확인한다.
     /// </summary>

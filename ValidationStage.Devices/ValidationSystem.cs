@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -11,14 +12,15 @@ namespace ValidationStage.Devices
     /// Validation Stage 장비 전체 (Motorized Stage + Hexapod + Probe). 보통 이 클래스 하나만 만들어 쓴다.
     /// 제어 컨셉: X, Y, Z 는 <see cref="Stage"/>, TX, TY, TZ 는 <see cref="Hexapod"/> 가 담당하며, 축을 받는 함수는 자동으로 나눠 보낸다.
     /// 장비 전용 기능(좌표계, 프로브 스캔/읽기 등)은 <see cref="Stage"/>, <see cref="Hexapod"/>, <see cref="Probe"/> 를 직접 호출한다.
-    /// 연결 주소는 exe 폴더의 StageHost.txt, HexapodHost.txt 에 저장된다 (StageHost.txt 에는 스테이지 원점 찾는 방향도 함께 저장).
+    /// 연결 주소는 exe 폴더의 StageHost.txt, HexapodHost.txt 에 저장된다 (StageHost.txt 에는 스테이지 원점 찾는 방향, HexapodHost.txt 에는 헥사포드 소프트웨어 리밋도 함께 저장).
     /// </summary>
     public class ValidationSystem
     {
-        /// <summary>장비 객체를 만들고 exe 폴더의 설정 파일(StageHost.txt)을 읽는다. 장비 연결은 하지 않는다.</summary>
+        /// <summary>장비 객체를 만들고 exe 폴더의 설정 파일(StageHost.txt, HexapodHost.txt)을 읽는다. 장비 연결은 하지 않는다.</summary>
         public ValidationSystem()
         {
             LoadStageSettings();
+            LoadHexapodSettings();
         }
 
         /// <summary>Motorized Stage (X, Y, Z)</summary>
@@ -47,7 +49,7 @@ namespace ValidationStage.Devices
             .ToDictionary(axis => axis, axis => HomeDirection.Negative);
 
         /// <summary>마지막으로 연결에 성공한 헥사포드 주소 (HexapodHost.txt). 저장된 적 없으면 "127.0.0.1".</summary>
-        public string HexapodHost { get; private set; } = LoadConnectionSetting(HexapodHostFile, "127.0.0.1");
+        public string HexapodHost { get; private set; } = "127.0.0.1";
 
         /// <summary>
         /// 스테이지에 연결한다 (백그라운드 실행 - 응답 없는 주소면 2초 걸림). 성공하면 주소를 StageHost.txt 에 저장한다.
@@ -72,7 +74,23 @@ namespace ValidationStage.Devices
                 return false;
             }
             HexapodHost = host;
-            SaveConnectionSetting(HexapodHostFile, host);
+            SaveHexapodSettings();
+            return true;
+        }
+
+        /// <summary>
+        /// 헥사포드 좌표계 하나의 소프트웨어 리밋을 정하고 HexapodHost.txt 에 저장한다 (연결 안 돼 있어도 된다).
+        /// 이후 그 좌표계가 활성일 때의 이동/조그가 이 값으로 검사된다. 읽기는 <see cref="Hexapod.GetSoftLimit"/>.
+        /// </summary>
+        /// <param name="coordSystem">좌표계 이름 (예: "ZERO", "TILTEDCS")</param>
+        /// <param name="limit">리밋 (arcmin, Min &lt; Max)</param>
+        public bool SetHexapodSoftLimit(string coordSystem, HexapodSoftLimit limit)
+        {
+            if (!Track(Hexapod.SetSoftLimit(coordSystem, limit), Hexapod.LastError))
+            {
+                return false;
+            }
+            SaveHexapodSettings();
             return true;
         }
 
@@ -316,74 +334,122 @@ namespace ValidationStage.Devices
             return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, fileName);
         }
 
-        private static string LoadConnectionSetting(string filePath, string defaultValue)
+        // 설정 파일 형식: 한 줄에 "키=값". 예전 형식(주소 한 줄만, '=' 없음)은 키 "Host" 로 읽는다 - 다음 저장 때 새 형식으로 바뀐다.
+        // 파일이 없거나 읽지 못하면 빈 목록 (기본값으로 시작).
+        private static List<KeyValuePair<string, string>> ReadSettings(string filePath)
         {
+            var settings = new List<KeyValuePair<string, string>>();
             try
             {
-                if (File.Exists(filePath))
+                if (!File.Exists(filePath))
                 {
-                    string value = File.ReadAllText(filePath).Trim();
-                    if (value.Length > 0)
-                    {
-                        return value;
-                    }
+                    return settings;
                 }
-            }
-            catch { }
-            return defaultValue;
-        }
-
-        private static void SaveConnectionSetting(string filePath, string value)
-        {
-            try { File.WriteAllText(filePath, value); } catch { }
-        }
-
-        // StageHost.txt 형식 (한 줄에 "키=값"):
-        //   Host=192.168.0.123
-        //   HomeDirX=Negative   (HomeDirY, HomeDirZ 도 같은 형식, Negative / Positive)
-        // 예전 형식(주소 한 줄만, '=' 없음)도 주소로 읽는다 - 다음 저장 때 새 형식으로 바뀐다.
-        private void LoadStageSettings()
-        {
-            try
-            {
-                if (!File.Exists(StageHostFile))
-                {
-                    return;
-                }
-                foreach (string rawLine in File.ReadAllLines(StageHostFile))
+                foreach (string rawLine in File.ReadAllLines(filePath))
                 {
                     string line = rawLine.Trim();
-                    int eq = line.IndexOf('=');
-                    if (eq < 0)
+                    if (line.Length == 0)
                     {
-                        if (line.Length > 0)
-                        {
-                            StageHost = line;
-                        }
                         continue;
                     }
-                    string key = line.Substring(0, eq).Trim();
-                    string value = line.Substring(eq + 1).Trim();
-                    if (key == "Host" && value.Length > 0)
-                    {
-                        StageHost = value;
-                    }
-                    else if (key.StartsWith("HomeDir") && Enum.TryParse(key.Substring("HomeDir".Length), out Axis axis)
-                        && _stageHomeDirections.ContainsKey(axis)
-                        && Enum.TryParse(value, out HomeDirection direction) && Enum.IsDefined(typeof(HomeDirection), direction))
-                    {
-                        _stageHomeDirections[axis] = direction;
-                    }
+                    int eq = line.IndexOf('=');
+                    settings.Add(eq < 0
+                        ? new KeyValuePair<string, string>("Host", line)
+                        : new KeyValuePair<string, string>(line.Substring(0, eq).Trim(), line.Substring(eq + 1).Trim()));
                 }
             }
             catch { }
+            return settings;
+        }
+
+        private static void WriteSettings(string filePath, IEnumerable<string> lines)
+        {
+            try { File.WriteAllLines(filePath, lines); } catch { }
+        }
+
+        // StageHost.txt:
+        //   Host=192.168.0.123
+        //   HomeDirX=Negative   (HomeDirY, HomeDirZ 도 같은 형식, Negative / Positive)
+        private void LoadStageSettings()
+        {
+            foreach (var kv in ReadSettings(StageHostFile))
+            {
+                if (kv.Key == "Host" && kv.Value.Length > 0)
+                {
+                    StageHost = kv.Value;
+                }
+                else if (kv.Key.StartsWith("HomeDir") && Enum.TryParse(kv.Key.Substring("HomeDir".Length), out Axis axis)
+                    && _stageHomeDirections.ContainsKey(axis)
+                    && Enum.TryParse(kv.Value, out HomeDirection direction) && Enum.IsDefined(typeof(HomeDirection), direction))
+                {
+                    _stageHomeDirections[axis] = direction;
+                }
+            }
         }
 
         private void SaveStageSettings()
         {
             var lines = new List<string> { "Host=" + StageHost };
             lines.AddRange(_stageHomeDirections.Select(kv => $"HomeDir{kv.Key}={kv.Value}"));
-            try { File.WriteAllLines(StageHostFile, lines); } catch { }
+            WriteSettings(StageHostFile, lines);
+        }
+
+        // HexapodHost.txt (소프트웨어 리밋은 값을 정한 좌표계만, 단위 arcmin):
+        //   Host=169.254.3.106
+        //   SoftLimit.TILTEDCS.Enabled=1
+        //   SoftLimit.TILTEDCS.TX=-300,300   (TY, TZ 도 같은 형식, 하한,상한)
+        // 항목이 빠지거나 잘못된 좌표계는 그 항목만 기본값 (사용, ±300 arcmin).
+        private void LoadHexapodSettings()
+        {
+            var limits = new Dictionary<string, HexapodSoftLimit>();
+            foreach (var kv in ReadSettings(HexapodHostFile))
+            {
+                string[] keyParts = kv.Key.Split('.');
+                if (kv.Key == "Host" && kv.Value.Length > 0)
+                {
+                    HexapodHost = kv.Value;
+                }
+                else if (keyParts.Length == 3 && keyParts[0] == "SoftLimit")
+                {
+                    if (!limits.TryGetValue(keyParts[1], out HexapodSoftLimit limit))
+                    {
+                        limit = limits[keyParts[1]] = new HexapodSoftLimit();
+                    }
+                    int index = Enum.TryParse(keyParts[2], out Axis axis) ? Array.IndexOf(Hexapod.Axes, axis) : -1;
+                    string[] range = kv.Value.Split(',');
+                    if (keyParts[2] == "Enabled")
+                    {
+                        limit.Enabled = kv.Value != "0";
+                    }
+                    else if (index >= 0 && range.Length == 2
+                        && double.TryParse(range[0], NumberStyles.Float, CultureInfo.InvariantCulture, out double min)
+                        && double.TryParse(range[1], NumberStyles.Float, CultureInfo.InvariantCulture, out double max)
+                        && min < max)
+                    {
+                        limit.Min[index] = min;
+                        limit.Max[index] = max;
+                    }
+                }
+            }
+            foreach (var kv in limits)
+            {
+                Hexapod.SetSoftLimit(kv.Key, kv.Value);   // 이름이 잘못된 항목은 버린다
+            }
+        }
+
+        private void SaveHexapodSettings()
+        {
+            var lines = new List<string> { "Host=" + HexapodHost };
+            foreach (var kv in Hexapod.GetStoredSoftLimits().OrderBy(kv => kv.Key, StringComparer.Ordinal))
+            {
+                lines.Add($"SoftLimit.{kv.Key}.Enabled={(kv.Value.Enabled ? 1 : 0)}");
+                for (int i = 0; i < Hexapod.Axes.Length; i++)
+                {
+                    lines.Add(string.Format(CultureInfo.InvariantCulture, "SoftLimit.{0}.{1}={2},{3}",
+                        kv.Key, Hexapod.Axes[i], kv.Value.Min[i], kv.Value.Max[i]));
+                }
+            }
+            WriteSettings(HexapodHostFile, lines);
         }
 
         #endregion
