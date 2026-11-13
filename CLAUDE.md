@@ -463,6 +463,12 @@ Since the user edits the manual by hand, later UI changes are patched in place (
 combos): only the affected images (`word/media/image1.png` main screen, `image2.png` stage callouts) and table rows in
 `word/document.xml` were replaced inside the zip — new pixels pasted from a fresh unconnected screenshot (area A tint
 in image1 = 0.8417·in + (34, 6, 10)), callouts redrawn in the same style. Don't regenerate the whole document.
+2026-11-13 patch (모터 방향, 스테이지 [원점] column, 소프트 리밋, 연결 필요 popup): image1–3 were re-shot from a harness
+that loads `ValidationStage.exe` by reflection, fakes the "connected" texts/grid/log, and grabs the screen (image1 = DWM
+window rect on a 1400×820 black canvas at x+7, area boxes A–E: 3px border + 40/255 tint of the border colour, letter badges;
+image2/3/9/10 = capture + 15px white margin, 2px red (220,30,30) boxes with numbered badges on the top-left corner). Stage
+and hexapod tables were renumbered ①–⑮; sections 6 (모터 방향 창, image9) and 7 (소프트 리밋 창, image10) were added with
+TOC lines, and `settings.xml` got `updateFields` so Word refreshes the TOC page numbers on open. The harness was not kept.
 
 ## Status / what's not yet verified
 
