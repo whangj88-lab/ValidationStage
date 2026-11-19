@@ -389,7 +389,10 @@ in software rather than wired 1:1 to COM ports. `Probe` therefore:
   `OrbitModuleDP` with `isResolutionAvailable(res18Bit)` and `Resolution != res18Bit` is set to 18 bit (logged per
   module; a failure only logs, connect still succeeds). **Also applied after `ScanAsync` (Ping) and a successful
   `NotifyAddModuleAsync`** (2026-11-19, user-reported: at connect the module list is usually empty — modules only
-  appear after [스캔]/[새 모듈 추가]), so modules already at 18 bit are skipped. Not yet run on hardware.
+  appear after [스캔]/[새 모듈 추가]), so modules already at 18 bit are skipped. User then reported `Resolution`
+  falls back to 14 bit after a disconnect, so it also sets `OrbitModuleDP.DefaultResolution` ("resolution to use on
+  module startup", presumably stored in the module — write-if-different) before `Resolution`. Whether
+  `DefaultResolution` really survives a disconnect/power cycle is unverified.
 - Zero/tare is a **software offset** (`Zero`/`ZeroAll`, stored per module ID), not a hardware preset. `OrbitModule`
   does expose `PresetInUnits` for a hardware zero if that's ever needed instead.
 

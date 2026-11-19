@@ -91,6 +91,8 @@ namespace ValidationStage.Devices
         // 인식된 DP 모듈 중 18비트를 지원하는데 18비트가 아닌 것(14/16비트)을 18비트로 바꾼다. _busLock 안에서 호출.
         // 연결 / 스캔 / 새 모듈 추가 직후에 호출 (모듈은 보통 스캔 후에야 목록에 생기므로). 이미 18비트인 모듈은 건드리지 않는다.
         // 한 모듈이 실패해도 연결/스캔은 성공으로 두고 로그만 남긴다.
+        // Resolution 은 현재값뿐이라 모듈 전원이 꺼지거나 연결이 끊기면 시작 기본값(공장 출하 14비트)으로 돌아간다.
+        // 그래서 시작 기본값 DefaultResolution 도 18비트로 바꿔 둔다 (모듈에 저장되는 값으로 보여서, 다를 때만 쓴다).
         private void SetResolution18Bit()
         {
             if (!HasNetwork())
@@ -103,9 +105,17 @@ namespace ValidationStage.Devices
                 string id = modules[i].ModuleID;
                 try
                 {
-                    if (modules[i] is OrbitModuleDP dp &&
-                        dp.isResolutionAvailable(eResolution.res18Bit) &&
-                        dp.Resolution != eResolution.res18Bit)
+                    if (!(modules[i] is OrbitModuleDP dp) || !dp.isResolutionAvailable(eResolution.res18Bit))
+                    {
+                        continue;
+                    }
+                    if (dp.DefaultResolution != eResolution.res18Bit)
+                    {
+                        eResolution beforeDefault = dp.DefaultResolution;
+                        dp.DefaultResolution = eResolution.res18Bit;
+                        _log.Add(T($"모듈 {id} 시작 기본 해상도 변경: {beforeDefault} → 18Bit", $"Module {id} startup default resolution changed: {beforeDefault} -> 18Bit"));
+                    }
+                    if (dp.Resolution != eResolution.res18Bit)
                     {
                         eResolution before = dp.Resolution;
                         dp.Resolution = eResolution.res18Bit;
