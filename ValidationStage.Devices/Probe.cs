@@ -58,7 +58,9 @@ namespace ValidationStage.Devices
 
         #region 연결 / 모듈 찾기
 
-        /// <summary>Orbit 컨트롤러에 연결한다 (컨트롤러 종류는 자동 인식). 연결된 모듈은 이전에 등록된 것만 보이며, 새 모듈은 <see cref="ScanAsync"/>.</summary>
+        /// <summary>Orbit 컨트롤러에 연결한다 (컨트롤러 종류는 자동 인식). 연결된 모듈은 이전에 등록된 것만 보이며, 새 모듈은 <see cref="ScanAsync"/>.
+        /// 연결 직후, 그리고 <see cref="ScanAsync"/>/<see cref="NotifyAddModuleAsync"/> 로 모듈이 인식된 뒤
+        /// 18비트를 지원하는 DP 모듈의 해상도가 18비트가 아니면 18비트로 바꾼다.</summary>
         public Task<bool> ConnectAsync()
         {
             return Task.Run(() =>
@@ -74,6 +76,7 @@ namespace ValidationStage.Devices
                             return false;
                         }
                         _log.Add(T($"Orbit 연결됨 - 네트워크 {_server.Networks.Count}개 발견", $"Orbit connected - {_server.Networks.Count} network(s) found"));
+                        SetResolution18Bit();
                         return true;
                     }
                     catch (Exception ex)
@@ -83,6 +86,37 @@ namespace ValidationStage.Devices
                     }
                 }
             });
+        }
+
+        // 인식된 DP 모듈 중 18비트를 지원하는데 18비트가 아닌 것(14/16비트)을 18비트로 바꾼다. _busLock 안에서 호출.
+        // 연결 / 스캔 / 새 모듈 추가 직후에 호출 (모듈은 보통 스캔 후에야 목록에 생기므로). 이미 18비트인 모듈은 건드리지 않는다.
+        // 한 모듈이 실패해도 연결/스캔은 성공으로 두고 로그만 남긴다.
+        private void SetResolution18Bit()
+        {
+            if (!HasNetwork())
+            {
+                return;
+            }
+            OrbitModules modules = _server.Networks[0].Modules;
+            for (int i = 0; i < modules.Count; i++)
+            {
+                string id = modules[i].ModuleID;
+                try
+                {
+                    if (modules[i] is OrbitModuleDP dp &&
+                        dp.isResolutionAvailable(eResolution.res18Bit) &&
+                        dp.Resolution != eResolution.res18Bit)
+                    {
+                        eResolution before = dp.Resolution;
+                        dp.Resolution = eResolution.res18Bit;
+                        _log.Add(T($"모듈 {id} 해상도 변경: {before} → 18Bit", $"Module {id} resolution changed: {before} -> 18Bit"));
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _log.Add(T($"모듈 {id} 해상도 변경 실패: ", $"Module {id} resolution change failed: ") + ex.Message);
+                }
+            }
         }
 
         /// <summary>
@@ -143,6 +177,7 @@ namespace ValidationStage.Devices
                         OrbitModules modules = _server.Networks[0].Modules;
                         int added = modules.Ping();
                         _log.Add(T($"스캔 완료 - 이번에 {added}개 추가, 전체 {modules.Count}개", $"Scan done - {added} added, {modules.Count} total"));
+                        SetResolution18Bit();
                         return modules.Count;
                     }
                     catch (Exception ex)
@@ -175,6 +210,10 @@ namespace ValidationStage.Devices
                     {
                         bool added = _server.Networks[0].Modules.NotifyAddModule();
                         _log.Add(added ? T("모듈 추가됨", "Module added") : T("모듈 추가 취소됨", "Module add cancelled"));
+                        if (added)
+                        {
+                            SetResolution18Bit();
+                        }
                         return added;
                     }
                     catch (Exception ex)

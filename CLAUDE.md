@@ -385,6 +385,11 @@ in software rather than wired 1:1 to COM ports. `Probe` therefore:
   `Probe.Read(moduleId)` (waits ≤1 s for `_busLock`, same error shape as `ReadAll`) run via `Task.Run` from
   `F_Main.ReadSingleProbeAsync`; `_singleReadsInFlight` blocks double-clicks on the same module. Works while
   continuous reading is stopped (state shows "개별 읽기"); an error is shown/logged but does **not** stop continuous reading.
+- **Resolution → 18 bit on connect (2026-11-19, user request):** `ConnectAsync` → `SetResolution18Bit()`: every
+  `OrbitModuleDP` with `isResolutionAvailable(res18Bit)` and `Resolution != res18Bit` is set to 18 bit (logged per
+  module; a failure only logs, connect still succeeds). **Also applied after `ScanAsync` (Ping) and a successful
+  `NotifyAddModuleAsync`** (2026-11-19, user-reported: at connect the module list is usually empty — modules only
+  appear after [스캔]/[새 모듈 추가]), so modules already at 18 bit are skipped. Not yet run on hardware.
 - Zero/tare is a **software offset** (`Zero`/`ZeroAll`, stored per module ID), not a hardware preset. `OrbitModule`
   does expose `PresetInUnits` for a hardware zero if that's ever needed instead.
 
