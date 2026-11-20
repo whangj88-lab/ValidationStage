@@ -79,6 +79,7 @@ namespace ValidationStage
             // _xCombo
             //
             this._xCombo.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this._xCombo.Enabled = false;
             this._xCombo.Items.AddRange(new object[] {
             "CCW (REV0)",
             "CW (REV1)"});
@@ -107,6 +108,7 @@ namespace ValidationStage
             // _yCombo
             //
             this._yCombo.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this._yCombo.Enabled = false;
             this._yCombo.Items.AddRange(new object[] {
             "CCW (REV0)",
             "CW (REV1)"});
@@ -135,6 +137,7 @@ namespace ValidationStage
             // _zCombo
             //
             this._zCombo.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this._zCombo.Enabled = false;
             this._zCombo.Items.AddRange(new object[] {
             "CCW (REV0)",
             "CW (REV1)"});

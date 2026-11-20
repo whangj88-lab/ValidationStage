@@ -164,6 +164,10 @@ the old stage comes back — it would need porting to the DLL's style).
   `SetMotorDirection(axis, MotorDirection)` (write-if-different, refused while that axis moves). Sample: [모터 방향] in
   the stage connection row → `F_StageDirection` (own designer file; X/Y/Z current value + combo, [적용] with confirm).
   The user asked for all three axes in the UI for now and will prune it later.
+- **Direction combos locked (2026-11-20, user: collision risk):** the REV combos in `F_StageDirection` and the main
+  screen's "찾는 방향" X/Y/Z combos are `Enabled = false` in the designer files (display only). Home direction is
+  changed by editing `HomeDirX/Y/Z=` in `C:\ValidationStage\DoNotTouch\StageHost.txt` (read at startup); REV is in
+  controller flash, so changing it needs the combo re-enabled in the designer (or MMT's own tool).
 - **REV follow-up (2026-10-28, user-reported on hardware):** (1) a REV write only takes effect after disconnect +
   reconnect; (2) REV does **not** swap the limit sensors (the axis drives past the limit). Fix: `SetMotorDirections(axes,
   dirs)` (single-axis `SetMotorDirection` wraps it) writes REV **and `HLS`** (manual 9.1.9: 0 = LR limits as wired,

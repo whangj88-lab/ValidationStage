@@ -1075,6 +1075,7 @@
             // _stageHomeDirXCombo
             //
             this._stageHomeDirXCombo.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this._stageHomeDirXCombo.Enabled = false;
             this._stageHomeDirXCombo.Items.AddRange(new object[] {
             "X (-)",
             "X (+)"});
@@ -1086,6 +1087,7 @@
             // _stageHomeDirYCombo
             //
             this._stageHomeDirYCombo.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this._stageHomeDirYCombo.Enabled = false;
             this._stageHomeDirYCombo.Items.AddRange(new object[] {
             "Y (-)",
             "Y (+)"});
@@ -1097,6 +1099,7 @@
             // _stageHomeDirZCombo
             //
             this._stageHomeDirZCombo.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this._stageHomeDirZCombo.Enabled = false;
             this._stageHomeDirZCombo.Items.AddRange(new object[] {
             "Z (-)",
             "Z (+)"});
