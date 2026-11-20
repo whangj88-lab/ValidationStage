@@ -9,7 +9,7 @@ namespace ValidationStage.Devices
 {
     /// <summary>
     /// 프로브 기울기 보정 (18.CSH030EX_4Line_Calibration 의 GageCounter.ReadPortAllCore 보정식과 같다).
-    /// 계수는 exe 폴더의 DoNotTouch\ProbeTiltCorrection.xml (참고 프로젝트와 같은 XmlSerializer 형식)에서 읽으며 공개하지 않는다.
+    /// 계수는 ValidationSystem.SettingsDirectory 의 ProbeTiltCorrection.xml (참고 프로젝트와 같은 XmlSerializer 형식)에서 읽으며 공개하지 않는다.
     /// 파일이 없으면 모든 계수 0(보정 없음)으로 만든다.
     /// </summary>
     internal class ProbeTiltCorrection

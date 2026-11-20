@@ -28,7 +28,7 @@ namespace ValidationStage
 
         private const int ReplyTimeoutMs = 10000;
         private const int HeaderSize = 44;
-        private static readonly string HostFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "VisionHost.txt");
+        private static readonly string HostFile = Path.Combine(ValidationSystem.SettingsDirectory, "VisionHost.txt");
 
         private TcpClient _tcp;
         private NetworkStream _stream;
@@ -64,7 +64,7 @@ namespace ValidationStage
                 _stream.ReadTimeout = ReplyTimeoutMs;
 
                 Host = host;
-                try { File.WriteAllText(HostFile, host); } catch { }
+                try { Directory.CreateDirectory(ValidationSystem.SettingsDirectory); File.WriteAllText(HostFile, host); } catch { }
                 return true;
             }
             catch (Exception ex)

@@ -33,7 +33,7 @@ Scope decisions made in conversation (not to be silently re-litigated in a futur
   (status `GetAxisStatuses()`, logs `GetLogs()`, connection `IsConnected`); failures return false/null + per-device
   `LastError` (`DeviceError`: PI GCS code, e.g. 5 = unreferenced, + message); messages Korean/English via
   `Messages.Language` (in-code string pairs `T(ko, en)`, no .resx/satellite DLLs); XML docs in Korean; no
-  obfuscation; settings txt files still auto-saved in the exe folder. "Low speed after connect" is the caller's job
+  obfuscation; settings txt files still auto-saved (in `C:\ValidationStage\DoNotTouch` since 2026-11-20). "Low speed after connect" is the caller's job
   (sample does it), not the DLL's. Probe: **the DLL keeps no read state** — `ReadAll`/`Read` return
   `ProbeReadResult` (`Ok/NotConnected/Busy/CommError/ModuleNotFound`) and stopping the read loop on `CommError` is the
   caller's job (user chose this over a DLL-internal read loop; the sample shows it).
@@ -349,9 +349,11 @@ in software rather than wired 1:1 to COM ports. `Probe` therefore:
 - Persists a `ModuleID -> operator label` mapping to `ProbeLabels.txt` next to the exe (e.g. map a module ID to
   "TZ1"), so the grid shows meaningful names instead of raw module IDs across restarts. Edited in the grid's "라벨"
   column, saved on `CellEndEdit`.
-- **All settings files live in the exe folder** (`AppDomain.CurrentDomain.BaseDirectory`, fixed 2026-09-30 — they
-  used to be relative to the working directory, so a shortcut with a different "Start in" lost them):
-  `ProbeLabels.txt`, `StageHost.txt`, `HexapodHost.txt`.
+- **All settings files live in `C:\ValidationStage\DoNotTouch`** (`ValidationSystem.SettingsDirectory`, public const;
+  changed 2026-11-20 so Debug/Release builds share the same settings — before that they were in the exe folder, and
+  originally relative to the working directory): `ProbeLabels.txt`, `StageHost.txt`, `HexapodHost.txt`,
+  `ProbeTiltCorrection.xml`, and the sample's `VisionHost.txt`. The folder is created on save. Old files in the exe
+  folder are not migrated.
 - DP10/DP20/DP2 are **probe stroke-range variants** (2/10/20 mm), not different protocols — confirmed by reading
   `503094 - DP_LE_AGM Manual.pdf` in the Support Pack. The SDK's `OrbitModuleDP`/`OrbitModule` classes handle all of
   them identically; there is no DP10-specific vs DP20-specific code anywhere in this project, and there shouldn't
@@ -398,7 +400,7 @@ in software rather than wired 1:1 to COM ports. `Probe` therefore:
   glass-thickness `ldComp`) ported 1:1 into internal `ProbeTiltCorrection` (verified identical to A's code on 1000 random
   inputs, with A's signs). Input = `Reading` (zeroed) of labels `X, Y, TZ1, TZ2, TX, TY1, TY2`, **no sign flip** — all +
   (user decision 2026-11-20: callers flip it themselves if needed; A multiplies X +1, rest −1) → `ProbeChannel.CorrectedReading` (double?, only in `ReadAll` when all 7 exist once and read OK; null
-  otherwise, incl. single `Read`). Coefficients **not exposed in the API** (user): `<exe>\DoNotTouch\ProbeTiltCorrection.xml`
+  otherwise, incl. single `Read`). Coefficients **not exposed in the API** (user): `C:\ValidationStage\DoNotTouch\ProbeTiltCorrection.xml`
   in A's XmlSerializer format (parsed with XElement since the class is internal; A's files load and vice versa), created
   with all 0 (= no correction, user choice) if missing; NaN/Inf or unreadable → 0 + log. Loaded once in the `Probe`
   constructor (restart to reload). The 45000/83000/60000/120000/−670 constants are A's geometry — B's probe layout is

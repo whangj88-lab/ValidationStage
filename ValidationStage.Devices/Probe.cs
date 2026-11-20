@@ -12,7 +12,7 @@ namespace ValidationStage.Devices
     /// <summary>
     /// Solartron Orbit3 프로브 (RS232IM / USBIM / ETHIM 컨트롤러 한 대에 DP10, DP20 등 Digital Probe 모듈이
     /// 데이지체인으로 여러 개 연결된 구성). 연결된 모듈 하나 = 채널 하나이며 개수는 고정하지 않는다.
-    /// 값 단위: µm. 모듈ID → 라벨(예: "TZ1") 매핑은 exe 폴더의 ProbeLabels.txt 에 저장된다.
+    /// 값 단위: µm. 모듈ID → 라벨(예: "TZ1") 매핑은 <see cref="ValidationSystem.SettingsDirectory"/> 의 ProbeLabels.txt 에 저장된다.
     /// 라벨이 X, Y, TZ1, TZ2, TX, TY1, TY2 인 7개 모듈이 있으면 <see cref="ReadAll"/> 이 기울기 보정값(<see cref="ProbeChannel.CorrectedReading"/>)도 채운다.
     /// </summary>
     /// <remarks>
@@ -36,16 +36,16 @@ namespace ValidationStage.Devices
         private readonly DeviceErrors _errors;
         private readonly ProbeTiltCorrection _tiltCorrection;
 
-        /// <param name="labelFilePath">라벨 파일. 상대 경로면 exe 폴더 기준.</param>
+        /// <param name="labelFilePath">라벨 파일. 상대 경로면 <see cref="ValidationSystem.SettingsDirectory"/> 기준.</param>
         public Probe(string labelFilePath = "ProbeLabels.txt")
         {
             _errors = new DeviceErrors(_log);
             _labelFilePath = Path.IsPathRooted(labelFilePath)
                 ? labelFilePath
-                : Path.Combine(AppDomain.CurrentDomain.BaseDirectory, labelFilePath);
+                : Path.Combine(ValidationSystem.SettingsDirectory, labelFilePath);
             LoadLabels();
             _tiltCorrection = ProbeTiltCorrection.Load(
-                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "DoNotTouch", "ProbeTiltCorrection.xml"), _log);
+                Path.Combine(ValidationSystem.SettingsDirectory, "ProbeTiltCorrection.xml"), _log);
         }
 
         /// <summary>Orbit 컨트롤러 연결 여부.</summary>
@@ -544,6 +544,7 @@ namespace ValidationStage.Devices
         {
             try
             {
+                Directory.CreateDirectory(Path.GetDirectoryName(_labelFilePath));
                 File.WriteAllLines(_labelFilePath, _labels.Select(kv => $"{kv.Key}={kv.Value}"));
             }
             catch

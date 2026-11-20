@@ -47,7 +47,7 @@ using ValidationStage.Devices;
 
 var system = new ValidationSystem();
 
-// 연결 - 성공한 주소는 exe 폴더의 StageHost.txt / HexapodHost.txt 에 저장되어 다음에 system.StageHost 등으로 읽힘
+// 연결 - 성공한 주소는 C:\ValidationStage\DoNotTouch 의 StageHost.txt / HexapodHost.txt 에 저장되어 다음에 system.StageHost 등으로 읽힘
 if (!await system.ConnectStageAsync("192.168.0.123"))
     Console.WriteLine(system.LastError);          // 실패 원인 (DeviceError: Code + Message)
 system.ConnectHexapod(system.HexapodHost);
@@ -112,7 +112,7 @@ system.DisconnectAll();
 - 프로브 기울기 보정: 라벨이 X, Y, TZ1, TZ2, TX, TY1, TY2 인 모듈 7개가 있으면 ReadAll 결과의 ProbeChannel.CorrectedReading
   (µm) 에 보정값이 들어갑니다 (Reading = 영점 적용 값, 보정 전). 7개 중 하나라도 없거나 오류면 null 입니다.
   부호는 뒤집지 않습니다 (모두 +). 반대 방향이 필요하면 가져가서 부호를 바꿔 쓰십시오.
-  보정 계수는 exe 폴더의 DoNotTouch\ProbeTiltCorrection.xml 에서 읽습니다 (없으면 모두 0 = 보정 없음으로 만들어짐).
+  보정 계수는 C:\ValidationStage\DoNotTouch\ProbeTiltCorrection.xml 에서 읽습니다 (없으면 모두 0 = 보정 없음으로 만들어짐).
 - 오류/로그 메시지 언어: Messages.Language = Language.Korean / Language.English
 
 
@@ -121,7 +121,8 @@ system.DisconnectAll();
 Sample\ValidationStage.sln 을 Visual Studio 2019 이상에서 열고 x64 로 빌드합니다.
 (Visual Studio 설치 시 ".NET 데스크톱 개발" 워크로드와 .NET Framework 4.8 대상 팩이 필요합니다)
 F_Main.cs 가 위 사용법을 모두 보여 줍니다 (연결, 저속 설정, 조그/이동/정지, 원점, 상태 표시, 프로브 읽기).
-예제가 쓰는 설정 파일(StageHost.txt, HexapodHost.txt, ProbeLabels.txt)은 exe 폴더에 자동으로 만들어집니다.
+예제가 쓰는 설정 파일(StageHost.txt, HexapodHost.txt, ProbeLabels.txt, VisionHost.txt)은 C:\ValidationStage\DoNotTouch
+(ValidationSystem.SettingsDirectory) 에 자동으로 만들어집니다.
 (StageHost.txt 에는 스테이지 주소, 축별 원점 찾는 방향, 측정 원점이 "Host=..." / "HomeDirX=Negative" /
  "MeasureOrigin=x,y,z" 형식으로,
  HexapodHost.txt 에는 헥사포드 주소와 소프트웨어 리밋이 "Host=..." / "SoftLimit.TILTEDCS.TX=-300,300" 형식으로 들어갑니다)

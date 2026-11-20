@@ -12,11 +12,11 @@ namespace ValidationStage.Devices
     /// Validation Stage 장비 전체 (Motorized Stage + Hexapod + Probe). 보통 이 클래스 하나만 만들어 쓴다.
     /// 제어 컨셉: X, Y, Z 는 <see cref="Stage"/>, TX, TY, TZ 는 <see cref="Hexapod"/> 가 담당하며, 축을 받는 함수는 자동으로 나눠 보낸다.
     /// 장비 전용 기능(좌표계, 프로브 스캔/읽기 등)은 <see cref="Stage"/>, <see cref="Hexapod"/>, <see cref="Probe"/> 를 직접 호출한다.
-    /// 연결 주소는 exe 폴더의 StageHost.txt, HexapodHost.txt 에 저장된다 (StageHost.txt 에는 스테이지 원점 찾는 방향, HexapodHost.txt 에는 헥사포드 소프트웨어 리밋도 함께 저장).
+    /// 연결 주소는 <see cref="SettingsDirectory"/> 의 StageHost.txt, HexapodHost.txt 에 저장된다 (StageHost.txt 에는 스테이지 원점 찾는 방향, HexapodHost.txt 에는 헥사포드 소프트웨어 리밋도 함께 저장).
     /// </summary>
     public class ValidationSystem
     {
-        /// <summary>장비 객체를 만들고 exe 폴더의 설정 파일(StageHost.txt, HexapodHost.txt)을 읽는다. 장비 연결은 하지 않는다.</summary>
+        /// <summary>장비 객체를 만들고 <see cref="SettingsDirectory"/> 의 설정 파일(StageHost.txt, HexapodHost.txt)을 읽는다. 장비 연결은 하지 않는다.</summary>
         public ValidationSystem()
         {
             LoadStageSettings();
@@ -40,10 +40,16 @@ namespace ValidationStage.Devices
 
         // 전체 시스템 초기화에서 스테이지 영점을 잡은 뒤 프로브 영점까지 기다리는 시간 (진동 안정)
         private const int ProbeSettleMs = 1500;
+        private const int StageHomeSettleMs = 1000;
+
+        /// <summary>
+        /// 설정 파일 폴더 (StageHost.txt, HexapodHost.txt, ProbeLabels.txt, ProbeTiltCorrection.xml 등).
+        /// exe 위치와 무관한 고정 경로라 Debug/Release 등 어느 폴더에서 실행해도 같은 설정을 쓴다. 없으면 저장할 때 만든다.
+        /// </summary>
+        public const string SettingsDirectory = @"C:\ValidationStage\DoNotTouch";
 
         #region 연결
 
-        // 설정 파일은 모두 exe 폴더에 둔다 (실행 위치/바로가기 시작 위치와 무관하게 같은 파일을 쓰도록).
         private static readonly string StageHostFile = SettingPath("StageHost.txt");
         private static readonly string HexapodHostFile = SettingPath("HexapodHost.txt");
 
@@ -313,7 +319,7 @@ namespace ValidationStage.Devices
                 return false;
             }
 
-            await Task.Delay(1000);
+            await Task.Delay(StageHomeSettleMs);
 
             _log.Add(string.Format(CultureInfo.InvariantCulture,
                 T("전체 시스템 초기화 3/4: 스테이지 측정 원점으로 이동 (X {0:0.000}, Y {1:0.000}, Z {2:0.000} µm) 후 0 으로 설정",
@@ -324,7 +330,7 @@ namespace ValidationStage.Devices
                 return false;
             }
 
-            await Task.Delay(1000);
+            await Task.Delay(StageHomeSettleMs);
 
             if (!Track(Stage.SetZero(MotorizedStage.Axes), Stage.LastError))
             {
@@ -461,7 +467,7 @@ namespace ValidationStage.Devices
 
         private static string SettingPath(string fileName)
         {
-            return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, fileName);
+            return Path.Combine(SettingsDirectory, fileName);
         }
 
         // 설정 파일 형식: 한 줄에 "키=값". 예전 형식(주소 한 줄만, '=' 없음)은 키 "Host" 로 읽는다 - 다음 저장 때 새 형식으로 바뀐다.
@@ -494,7 +500,12 @@ namespace ValidationStage.Devices
 
         private static void WriteSettings(string filePath, IEnumerable<string> lines)
         {
-            try { File.WriteAllLines(filePath, lines); } catch { }
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(filePath));
+                File.WriteAllLines(filePath, lines);
+            }
+            catch { }
         }
 
         // StageHost.txt:
