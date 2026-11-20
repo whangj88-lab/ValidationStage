@@ -81,6 +81,10 @@ namespace ValidationStage.Devices
         private CancellationTokenSource _pollCts;
         private string _host;
 
+        // 축별 "기계 좌표 = 표시 좌표 + 오프셋" (µm, X,Y,Z 순서). 기계 좌표 = 기계 원점 찾기 직후의 컨트롤러 좌표.
+        // 원점 찾기 성공 = 0, p0 = 오프셋 += 그때 위치. 모르면 NaN (연결 직후 - 그 사이 컨트롤러 전원이 꺼졌을 수 있음, 원점 찾기 실패).
+        private readonly double[] _machineOffsets = { double.NaN, double.NaN, double.NaN };
+
         private readonly LogBuffer _log = new LogBuffer("Stage");
         private readonly DeviceErrors _errors;
 
@@ -171,6 +175,7 @@ namespace ValidationStage.Devices
                 Task.Run(() => PollingStatus(token));
 
                 _host = host;
+                SetMachineOffsets(Axes, double.NaN);
                 _log.Add(T("연결됨", "Connected"));
                 WarnLimitMismatch();
                 return true;
@@ -360,6 +365,7 @@ namespace ValidationStage.Devices
                     WriteIfDifferent(axisNo, "hmad", speed * 10);
                     WriteIfDifferent(axisNo, "hmvf", speed / 10);
                 }
+                SetMachineOffsets(axes, double.NaN);   // 끝까지 성공해야 기계 좌표가 된다
                 for (int i = 0; i < axes.Length; i++)
                 {
                     int axisNo = AxisNo(axes[i]);
@@ -376,6 +382,7 @@ namespace ValidationStage.Devices
                 _log.Add(T("원점 찾는 중...", "Homing..."));
 
                 await WaitForStopAsync(axes);
+                SetMachineOffsets(axes, 0);
                 _log.Add(T("원점 찾기 완료", "Homing done"));
                 return true;
             }
@@ -386,15 +393,29 @@ namespace ValidationStage.Devices
             }
         }
 
-        /// <summary>현재 위치를 컨트롤러의 0 위치로 설정한다 ("p0").</summary>
-        public bool SetZero(Axis[] axes)
+        /// <summary>
+        /// 현재 위치를 컨트롤러의 0 위치로 설정한다 ("p0"). 운용 중 실수로 원점이 바뀌지 않도록 공개하지 않고,
+        /// <see cref="ValidationSystem.HomeAndZeroProbesAsync"/> 가 측정 원점에서만 쓴다.
+        /// </summary>
+        internal bool SetZero(Axis[] axes)
         {
             try
             {
                 CheckReady(axes);
+                UpdateStatuses();   // p0 직전 위치로 기계 좌표 오프셋을 옮긴다
                 foreach (Axis axis in axes)
                 {
+                    double position;
+                    lock (_statusLock)
+                    {
+                        position = _statuses.First(status => status.Axis == axis).Position;
+                    }
                     ExpectOk(Query($"{AxisNo(axis)}p0"));
+                    int index = Array.IndexOf(Axes, axis);
+                    lock (_statusLock)
+                    {
+                        _machineOffsets[index] += position;
+                    }
                 }
                 UpdateStatuses();
                 return true;
@@ -581,9 +602,37 @@ namespace ValidationStage.Devices
             }
         }
 
+        /// <summary>
+        /// X, Y, Z 현재 위치를 기계 좌표(기계 원점 찾기 직후의 컨트롤러 좌표, µm)로 돌려준다.
+        /// 미연결이거나, 연결 후 기계 원점 찾기를 하지 않은 축이 있으면 null.
+        /// </summary>
+        internal double[] GetMachinePositions()
+        {
+            if (!IsConnected)
+            {
+                return null;
+            }
+            lock (_statusLock)
+            {
+                double[] positions = Axes.Select((axis, i) => _statuses.First(status => status.Axis == axis).Position + _machineOffsets[i]).ToArray();
+                return positions.Any(double.IsNaN) ? null : positions;
+            }
+        }
+
         #endregion
 
         #region private
+
+        private void SetMachineOffsets(Axis[] axes, double value)
+        {
+            lock (_statusLock)
+            {
+                foreach (Axis axis in axes)
+                {
+                    _machineOffsets[Array.IndexOf(Axes, axis)] = value;
+                }
+            }
+        }
 
         private void CheckConnected()
         {

@@ -65,6 +65,7 @@
     <Compile Include="MotorizedStage.cs" />
     <Compile Include="PI_GCS2.cs" />
     <Compile Include="Probe.cs" />
+    <Compile Include="ProbeTiltCorrection.cs" />
     <Compile Include="ValidationSystem.cs" />
     <Compile Include="View3D\Hexapod3DForm.cs">
       <SubType>Form</SubType>

@@ -583,26 +583,63 @@ namespace ValidationStage
             _stageFindHomeButton.Enabled = true;
         }
 
-        private void StageSetHomeButton_Click(object sender, EventArgs e)
+        /// <summary>
+        /// 전체 시스템 초기화 (세 장비 모두): 헥사포드 0 → 스테이지 기계 원점 찾기 → 측정 원점으로 이동 후 스테이지 0 → 프로브 전체 영점.
+        /// 측정 원점이 저장된 적 없으면 DLL 이 스테이지 기계 원점 찾기까지만 한다.
+        /// </summary>
+        private async void SystemInitButton_Click(object sender, EventArgs e)
+        {
+            bool hasOrigin = _system.GetStageMeasureOrigin() != null;
+            if (!RequireStageConnected() || (hasOrigin && (!RequireHexapodConnected() || !RequireProbeConnected())))
+            {
+                return;
+            }
+            HomeDirection x = (HomeDirection)_stageHomeDirXCombo.SelectedIndex;
+            HomeDirection y = (HomeDirection)_stageHomeDirYCombo.SelectedIndex;
+            HomeDirection z = (HomeDirection)_stageHomeDirZCombo.SelectedIndex;
+            string directions = $"({_stageHomeDirXCombo.Text}, {_stageHomeDirYCombo.Text}, {_stageHomeDirZCombo.Text})";
+            string message = hasOrigin
+                ? "전체 시스템 초기화를 실행합니다.\n" +
+                  "1. 헥사포드 TX, TY, TZ → 0\n" +
+                  $"2. 스테이지 X, Y, Z 기계 원점 찾기 {directions}\n" +
+                  "3. 저장된 측정 원점으로 이동 후 스테이지 0 설정\n" +
+                  "4. 프로브 전체 영점\n\n" +
+                  "축이 리밋까지 크게 움직입니다. 프로브 등 주변에 부딪힐 것이 없는지 확인하셨습니까?"
+                : $"저장된 측정 원점이 없어 스테이지 기계 원점 찾기만 합니다. {directions}\n" +
+                  "끝나면 측정 원점으로 쓸 위치로 옮긴 뒤 [측정 원점 저장]을 누르세요.\n\n" +
+                  "축이 리밋까지 크게 움직입니다. 프로브 등 주변에 부딪힐 것이 없는지 확인하셨습니까?";
+            DialogResult answer = MessageBox.Show(message, "전체 시스템 초기화", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning);
+            if (answer != DialogResult.OK)
+            {
+                return;
+            }
+            _systemInitButton.Enabled = false;
+            if (!await _system.HomeAndZeroProbesAsync(x, y, z))
+            {
+                // 실패 원인은 DLL 로그에 이미 남는다 (LastError 와 같은 내용).
+                MessageBox.Show("전체 시스템 초기화 실패:\n" + _system.LastError, "전체 시스템 초기화", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            _systemInitButton.Enabled = true;
+        }
+
+        private void StageSaveOriginButton_Click(object sender, EventArgs e)
         {
             if (!RequireStageConnected())
             {
                 return;
             }
             DialogResult answer = MessageBox.Show(
-                "현재 X, Y, Z 위치를 원점(0)으로 설정합니다.\n이전 원점 기준 위치는 사라집니다. 계속하시겠습니까?",
-                "스테이지 원점 설정", MessageBoxButtons.OKCancel, MessageBoxIcon.Question);
-            if (answer != DialogResult.OK)
+                "현재 스테이지 X, Y, Z 위치를 측정 원점으로 저장합니다. (헥사포드는 항상 TX, TY, TZ = 0)\n" +
+                "이후 [전체 시스템 초기화]는 이 위치에서 프로브 영점을 잡습니다. 이전에 저장한 측정 원점은 사라집니다.\n\n" +
+                "정말 현재 위치를 측정 원점으로 저장하시겠습니까?",
+                "측정 원점 저장", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+            if (answer != DialogResult.Yes)
             {
                 return;
             }
-            if (_system.SetStageZero())
+            if (!_system.SaveStageMeasureOriginFromCurrent())
             {
-                AppendLog(L("[Stage] 현재 위치를 원점(0)으로 설정", "[Stage] Current position set as origin (0)"));
-            }
-            else
-            {
-                AppendLog(L("[Stage] 원점 설정 실패", "[Stage] Failed to set origin"));
+                MessageBox.Show("측정 원점 저장 실패:\n" + _system.LastError, "측정 원점 저장", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -853,6 +890,7 @@ namespace ValidationStage
                 return;
             }
             row.Cells[_colReading.Index].Value = ch.IsError ? "-" : ch.Reading.ToString("0.000");
+            row.Cells[_colCorrected.Index].Value = "-";   // 보정값은 7개 모듈을 함께 읽는 ReadAll 에서만 나온다
             row.Cells[_colState.Index].Value = ch.IsError ? ("오류: " + ch.ErrorMessage) : (_probeReading ? "정상" : "개별 읽기");
             row.Cells[_colState.Index].Style.ForeColor = ch.IsError ? Color.Red : Color.Black;
             if (ch.IsError)
@@ -972,6 +1010,7 @@ namespace ValidationStage
             {
                 DataGridViewRow row = SyncProbeRow(ch);
                 row.Cells[_colReading.Index].Value = ch.IsError ? "-" : ch.Reading.ToString("0.000");
+                row.Cells[_colCorrected.Index].Value = ch.CorrectedReading?.ToString("0.000") ?? "-";
                 row.Cells[_colState.Index].Value = ch.IsError ? ("오류: " + ch.ErrorMessage) : "정상";
                 row.Cells[_colState.Index].Style.ForeColor = ch.IsError ? Color.Red : Color.Black;
             }
@@ -1012,6 +1051,7 @@ namespace ValidationStage
                 if (row.Cells[_colReading.Index].Value == null)
                 {
                     row.Cells[_colReading.Index].Value = "-";
+                    row.Cells[_colCorrected.Index].Value = "-";
                     row.Cells[_colState.Index].Value = "읽기 중지";
                     row.Cells[_colState.Index].Style.ForeColor = Color.Gray;
                 }

@@ -101,6 +101,18 @@ system.DisconnectAll();
   리밋 방향(HLS)도 같이 바뀌고, 컨트롤러에 반영되도록 스테이지 연결을 자동으로 끊었다가 다시 연결합니다 (X, Y, Z 모두 정지 상태에서 호출).
   바꾸면 조그/이동/원점 찾기 방향과 위치 방향이 모두 반대가 되므로 기계 원점 찾기를 다시 하고, 저속으로 양쪽 리밋 동작을 먼저 확인하십시오.
   리밋 방향이 모터 방향과 맞는지는 Stage.IsLimitDirectionMatched(axis) 로 확인합니다.
+- 전체 시스템 초기화 (측정 전 프로브 영점): system.HomeAndZeroProbesAsync(x, y, z 찾는 방향)
+  = 헥사포드 TX, TY, TZ -> 0 (활성 좌표계) -> 스테이지 기계 원점 찾기 -> 저장된 측정 원점으로 이동 -> 그 위치를 스테이지 0 으로
+  -> 프로브 전체 영점. 끝나면 스테이지 0 / 헥사포드 0 위치에서 프로브가 0 입니다.
+  시작 전에 세 장비 연결과 헥사포드 레퍼런스를 확인하고, 아니면 아무것도 움직이지 않습니다.
+  측정 원점(스테이지 X, Y, Z 만 - 헥사포드는 항상 TX, TY, TZ = 0)은 처음 한 번 정합니다:
+  기계 원점 찾기(HomeStageAsync) -> 조그로 측정 위치에 맞춤 -> system.SaveStageMeasureOriginFromCurrent()
+  (기계 원점 기준 좌표를 StageHost.txt 에 저장).
+  스테이지 현재 위치를 임의로 0 으로 바꾸는 기능은 없습니다 (운용 중 원점이 바뀌는 실수 방지).
+- 프로브 기울기 보정: 라벨이 X, Y, TZ1, TZ2, TX, TY1, TY2 인 모듈 7개가 있으면 ReadAll 결과의 ProbeChannel.CorrectedReading
+  (µm) 에 보정값이 들어갑니다 (Reading = 영점 적용 값, 보정 전). 7개 중 하나라도 없거나 오류면 null 입니다.
+  부호는 뒤집지 않습니다 (모두 +). 반대 방향이 필요하면 가져가서 부호를 바꿔 쓰십시오.
+  보정 계수는 exe 폴더의 DoNotTouch\ProbeTiltCorrection.xml 에서 읽습니다 (없으면 모두 0 = 보정 없음으로 만들어짐).
 - 오류/로그 메시지 언어: Messages.Language = Language.Korean / Language.English
 
 
@@ -110,5 +122,6 @@ Sample\ValidationStage.sln 을 Visual Studio 2019 이상에서 열고 x64 로 �
 (Visual Studio 설치 시 ".NET 데스크톱 개발" 워크로드와 .NET Framework 4.8 대상 팩이 필요합니다)
 F_Main.cs 가 위 사용법을 모두 보여 줍니다 (연결, 저속 설정, 조그/이동/정지, 원점, 상태 표시, 프로브 읽기).
 예제가 쓰는 설정 파일(StageHost.txt, HexapodHost.txt, ProbeLabels.txt)은 exe 폴더에 자동으로 만들어집니다.
-(StageHost.txt 에는 스테이지 주소와 축별 원점 찾는 방향이 "Host=..." / "HomeDirX=Negative" 형식으로,
+(StageHost.txt 에는 스테이지 주소, 축별 원점 찾는 방향, 측정 원점이 "Host=..." / "HomeDirX=Negative" /
+ "MeasureOrigin=x,y,z" 형식으로,
  HexapodHost.txt 에는 헥사포드 주소와 소프트웨어 리밋이 "Host=..." / "SoftLimit.TILTEDCS.TX=-300,300" 형식으로 들어갑니다)

@@ -151,8 +151,8 @@ the old stage comes back — it would need porting to the DLL's style).
   2026-10-27), so `HomeAsync` now also writes `HME` (stored in flash, write-if-different) to match: (−) = `hme1` (CW,
   the stored default; CW limit = −), (+) = `hme0` (CCW), and logs "HMEx, HMx" per axis — **hypothesis, being tested
   per axis by the user**. Per-axis homing: a [원점] column (9th) in the stage axis table → `HomeStageAxisAsync(axis,
-  dir)`, direction from that axis's "찾는 방향" combo), [현재 위치를 원점으로] → `SetZero` = `p0`, [원점으로 이동] → absolute
-  move to 0. Controller-stored homing speeds were 10 mm/s (HMV 512000), so `HomeAsync` first sets HMV to the 중속
+  dir)`, direction from that axis's "찾는 방향" combo), [원점으로 이동] → absolute
+  move to 0. ([현재 위치를 원점으로] = `p0` was **removed 2026-11-20** — see "Origin sequence" below; `SetZero` is now internal. [기계 원점 찾기] itself is unchanged.) Controller-stored homing speeds were 10 mm/s (HMV 512000), so `HomeAsync` first sets HMV to the 중속
   value (HMA/HMAD ×10, HMVF ÷10; write-if-different). Position counters restart at 0 on controller power-up, so run
   [기계 원점 찾기] after powering the controller on. Not yet run on the stage: homing direction (HME=1 stored) and
   whether the position reads 0 after homing (HMO=0) are unverified.
@@ -393,6 +393,17 @@ in software rather than wired 1:1 to COM ports. `Probe` therefore:
   falls back to 14 bit after a disconnect, so it also sets `OrbitModuleDP.DefaultResolution` ("resolution to use on
   module startup", presumably stored in the module — write-if-different) before `Resolution`. Whether
   `DefaultResolution` really survives a disconnect/power cycle is unverified.
+- **Tilt correction (2026-11-20, user request):** A's `GageCounter.ReadPortAllCore` correction (A's
+  `18.CSH030EX_4Line_Calibration/Code/Source/MySingleton.cs`; latest version: XtoY/YtoX use the *original* X/Y, plus the
+  glass-thickness `ldComp`) ported 1:1 into internal `ProbeTiltCorrection` (verified identical to A's code on 1000 random
+  inputs, with A's signs). Input = `Reading` (zeroed) of labels `X, Y, TZ1, TZ2, TX, TY1, TY2`, **no sign flip** — all +
+  (user decision 2026-11-20: callers flip it themselves if needed; A multiplies X +1, rest −1) → `ProbeChannel.CorrectedReading` (double?, only in `ReadAll` when all 7 exist once and read OK; null
+  otherwise, incl. single `Read`). Coefficients **not exposed in the API** (user): `<exe>\DoNotTouch\ProbeTiltCorrection.xml`
+  in A's XmlSerializer format (parsed with XElement since the class is internal; A's files load and vice versa), created
+  with all 0 (= no correction, user choice) if missing; NaN/Inf or unreadable → 0 + log. Loaded once in the `Probe`
+  constructor (restart to reload). The 45000/83000/60000/120000/−670 constants are A's geometry — B's probe layout is
+  the same (user, 2026-11-20). Grid: "보정값 (µm)"
+  column after "측정값 (µm)" (= zeroed, before correction — the user's definition of 원본).
 - Zero/tare is a **software offset** (`Zero`/`ZeroAll`, stored per module ID), not a hardware preset. `OrbitModule`
   does expose `PresetInUnits` for a hardware zero if that's ever needed instead.
 
@@ -407,8 +418,29 @@ Reference material, if the SDK needs re-checking:
 Thin facade, not a big abstraction: owns one `MotorizedStage`, one `Hexapod` and one `Probe`, plus the axis routing
 (`MoveAbsAsync`/`JogRun`/`JogStop`/`StopAxisAsync`) and the shared speed-level and stop-both-devices logic described above.
 Also owns per-axis absolute move (`MoveAbsAsync`, machine coordinates) and **home (원점), split per device**.
-Stage: controller-native — `HomeStageAsync` (`hm0`), `SetStageZero` (`p0`), `MoveStageToZeroAsync` (see the MMT
-section above). Hexapod: only `MoveHexapodToZeroAsync` (TX,TY,TZ → 0 in the active CS). **The hexapod "save current
+Stage: controller-native — `HomeStageAsync` (`hm0`), `MoveStageToZeroAsync` (see the MMT
+section above).
+
+**Origin sequence = "전체 시스템 초기화" (2026-11-20, user design — replaces A's "vision moves the mark to ~0, then zero
+the probes", since B has no vision head):** [▶ 전체 시스템 초기화] in the shared speed/stop row (`_speedPanel` — it acts
+on all devices, so not in the stage group; user). It's the basic first operation, so the user asked for it to stand out:
+**first/leftmost in the row, 220×44, SteelBlue, white bold 11pt**; the row grew to 62 px and the other controls got top
+margins (buttons/boxes 14, labels 11) to stay vertically centred → `ValidationSystem.HomeAndZeroProbesAsync(x,
+y, z)` (directions from the stage "찾는 방향" combos): prechecks (all 3 devices connected, hexapod referenced; nothing
+moves if one fails) → hexapod TX/TY/TZ → 0 → stage homing → absolute move to the saved **measurement origin** → internal
+`Stage.SetZero` (`p0`) → 500 ms → `Probe.ZeroAll()`. With no origin saved it only homes and logs a hint. The stage's own
+[기계 원점 찾기] stays as before (plain `HomeStageAsync`; user: a basic function that must exist). Origin = **stage
+X/Y/Z only** in machine coordinates (= controller coordinates right after homing); the hexapod part is always
+TX/TY/TZ = 0, nothing saved for it (user; an earlier version also saved/checked the active CS — removed). Saved by
+`SaveStageMeasureOriginFromCurrent()` ([측정 원점 저장] in the stage home row, in the old [현재 위치를 원점으로] slot,
+Yes/No confirm with No as default) in `StageHost.txt` (`MeasureOrigin=x,y,z`). Per-axis [원점] buttons kept (user):
+homing one axis makes that axis's 0 the machine home again. `MotorizedStage` tracks a
+per-axis machine offset (machine = displayed + offset; NaN after `Connect`/failed homing, 0 after homing, += pos on
+`p0`; `GetMachinePositions()` internal, null if any axis unknown) so saving works both right after homing and after a
+sequence. Rationale (worked out with the user): A's correction is linear except tiny sin/cos terms, so the exact zero
+location barely matters (≈0.003 µm for a 10 arcmin TZ offset) — what matters is a repeatable pose. User decisions:
+homing is part of the sequence (warning dialog mentions probe contact). `ValidationSystem` has its own
+`LogBuffer("System")` merged into `GetLogs()`. Not yet run on hardware. Hexapod: only `MoveHexapodToZeroAsync` (TX,TY,TZ → 0 in the active CS). **The hexapod "save current
 as home" feature (`SetHexapodHomeFromCurrent`/`MoveHexapodHomeAsync`/`HexapodHome.txt`, ported from A's
 `SetHome6DFormCurPos`/`MoveHome6D`) was removed 2026-10-07 (user decision):** it only remembered a pose, the display
 never became 0 (confusing next to the stage's `p0` button of the same name), absolute move covers it, and the saved

@@ -144,7 +144,7 @@ namespace ValidationStage.Devices
     {
         /// <summary>발생 시각</summary>
         public DateTime Time { get; }
-        /// <summary>출처: "Stage", "Hexapod", "Probe"</summary>
+        /// <summary>출처: "Stage", "Hexapod", "Probe", "System" (<see cref="ValidationSystem"/> 의 전체 시스템 초기화 등)</summary>
         public string Source { get; }
         /// <summary>내용</summary>
         public string Message { get; }

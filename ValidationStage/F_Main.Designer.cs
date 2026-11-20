@@ -104,7 +104,7 @@
             this._stageHomeDirXCombo = new System.Windows.Forms.ComboBox();
             this._stageHomeDirYCombo = new System.Windows.Forms.ComboBox();
             this._stageHomeDirZCombo = new System.Windows.Forms.ComboBox();
-            this._stageSetHomeButton = new System.Windows.Forms.Button();
+            this._stageSaveOriginButton = new System.Windows.Forms.Button();
             this._stageMoveHomeButton = new System.Windows.Forms.Button();
             this._stageConnRow = new System.Windows.Forms.FlowLayoutPanel();
             this._stageHostLabel = new System.Windows.Forms.Label();
@@ -118,6 +118,7 @@
             this._speedCombo = new System.Windows.Forms.ComboBox();
             this._stopAllNormalButton = new System.Windows.Forms.Button();
             this._stopAllButton = new System.Windows.Forms.Button();
+            this._systemInitButton = new System.Windows.Forms.Button();
             this._visionHostLabel = new System.Windows.Forms.Label();
             this._visionHostBox = new System.Windows.Forms.TextBox();
             this._visionConnectButton = new System.Windows.Forms.Button();
@@ -129,6 +130,7 @@
             this._colModuleId = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this._colLabel = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this._colReading = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this._colCorrected = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this._colState = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this._colRead = new System.Windows.Forms.DataGridViewButtonColumn();
             this._colZero = new System.Windows.Forms.DataGridViewButtonColumn();
@@ -1041,7 +1043,7 @@
             this._stageHomeRow.Controls.Add(this._stageHomeDirXCombo);
             this._stageHomeRow.Controls.Add(this._stageHomeDirYCombo);
             this._stageHomeRow.Controls.Add(this._stageHomeDirZCombo);
-            this._stageHomeRow.Controls.Add(this._stageSetHomeButton);
+            this._stageHomeRow.Controls.Add(this._stageSaveOriginButton);
             this._stageHomeRow.Controls.Add(this._stageMoveHomeButton);
             this._stageHomeRow.Dock = System.Windows.Forms.DockStyle.Bottom;
             this._stageHomeRow.Location = new System.Drawing.Point(3, 261);
@@ -1103,15 +1105,15 @@
             this._stageHomeDirZCombo.Size = new System.Drawing.Size(58, 23);
             this._stageHomeDirZCombo.TabIndex = 7;
             //
-            // _stageSetHomeButton
+            // _stageSaveOriginButton
             //
-            this._stageSetHomeButton.Location = new System.Drawing.Point(381, 9);
-            this._stageSetHomeButton.Name = "_stageSetHomeButton";
-            this._stageSetHomeButton.Size = new System.Drawing.Size(150, 23);
-            this._stageSetHomeButton.TabIndex = 0;
-            this._stageSetHomeButton.Text = "현재 위치를 원점으로";
-            this._stageSetHomeButton.UseVisualStyleBackColor = true;
-            this._stageSetHomeButton.Click += new System.EventHandler(this.StageSetHomeButton_Click);
+            this._stageSaveOriginButton.Location = new System.Drawing.Point(381, 9);
+            this._stageSaveOriginButton.Name = "_stageSaveOriginButton";
+            this._stageSaveOriginButton.Size = new System.Drawing.Size(150, 23);
+            this._stageSaveOriginButton.TabIndex = 0;
+            this._stageSaveOriginButton.Text = "측정 원점 저장";
+            this._stageSaveOriginButton.UseVisualStyleBackColor = true;
+            this._stageSaveOriginButton.Click += new System.EventHandler(this.StageSaveOriginButton_Click);
             // 
             // _stageMoveHomeButton
             // 
@@ -1199,6 +1201,7 @@
             // 
             // _speedPanel
             // 
+            this._speedPanel.Controls.Add(this._systemInitButton);
             this._speedPanel.Controls.Add(this._speedLabel);
             this._speedPanel.Controls.Add(this._speedCombo);
             this._speedPanel.Controls.Add(this._stopAllNormalButton);
@@ -1213,13 +1216,14 @@
             this._speedPanel.Location = new System.Drawing.Point(0, 300);
             this._speedPanel.Name = "_speedPanel";
             this._speedPanel.Padding = new System.Windows.Forms.Padding(6);
-            this._speedPanel.Size = new System.Drawing.Size(1384, 36);
+            this._speedPanel.Size = new System.Drawing.Size(1384, 62);
             this._speedPanel.TabIndex = 1;
             // 
             // _speedLabel
             // 
             this._speedLabel.AutoSize = true;
-            this._speedLabel.Location = new System.Drawing.Point(9, 6);
+            this._speedLabel.Location = new System.Drawing.Point(259, 17);
+            this._speedLabel.Margin = new System.Windows.Forms.Padding(3, 11, 3, 0);
             this._speedLabel.Name = "_speedLabel";
             this._speedLabel.Padding = new System.Windows.Forms.Padding(0, 6, 4, 0);
             this._speedLabel.Size = new System.Drawing.Size(38, 21);
@@ -1233,14 +1237,16 @@
             "저속",
             "중속",
             "고속"});
-            this._speedCombo.Location = new System.Drawing.Point(53, 9);
+            this._speedCombo.Location = new System.Drawing.Point(303, 20);
+            this._speedCombo.Margin = new System.Windows.Forms.Padding(3, 14, 3, 3);
             this._speedCombo.Name = "_speedCombo";
             this._speedCombo.Size = new System.Drawing.Size(100, 23);
             this._speedCombo.TabIndex = 0;
             // 
             // _stopAllNormalButton
             // 
-            this._stopAllNormalButton.Location = new System.Drawing.Point(159, 9);
+            this._stopAllNormalButton.Location = new System.Drawing.Point(409, 20);
+            this._stopAllNormalButton.Margin = new System.Windows.Forms.Padding(3, 14, 3, 3);
             this._stopAllNormalButton.Name = "_stopAllNormalButton";
             this._stopAllNormalButton.Size = new System.Drawing.Size(100, 23);
             this._stopAllNormalButton.TabIndex = 2;
@@ -1252,7 +1258,8 @@
             // 
             this._stopAllButton.BackColor = System.Drawing.Color.IndianRed;
             this._stopAllButton.ForeColor = System.Drawing.Color.White;
-            this._stopAllButton.Location = new System.Drawing.Point(265, 9);
+            this._stopAllButton.Location = new System.Drawing.Point(515, 20);
+            this._stopAllButton.Margin = new System.Windows.Forms.Padding(3, 14, 3, 3);
             this._stopAllButton.Name = "_stopAllButton";
             this._stopAllButton.Size = new System.Drawing.Size(130, 23);
             this._stopAllButton.TabIndex = 1;
@@ -1260,11 +1267,25 @@
             this._stopAllButton.UseVisualStyleBackColor = false;
             this._stopAllButton.Click += new System.EventHandler(this.StopAllButton_Click);
             //
+            // _systemInitButton
+            //
+            this._systemInitButton.BackColor = System.Drawing.Color.SteelBlue;
+            this._systemInitButton.Font = new System.Drawing.Font("맑은 고딕", 11F, System.Drawing.FontStyle.Bold);
+            this._systemInitButton.ForeColor = System.Drawing.Color.White;
+            this._systemInitButton.Location = new System.Drawing.Point(9, 9);
+            this._systemInitButton.Margin = new System.Windows.Forms.Padding(3, 3, 24, 3);
+            this._systemInitButton.Name = "_systemInitButton";
+            this._systemInitButton.Size = new System.Drawing.Size(220, 44);
+            this._systemInitButton.TabIndex = 8;
+            this._systemInitButton.Text = "▶ 전체 시스템 초기화";
+            this._systemInitButton.UseVisualStyleBackColor = false;
+            this._systemInitButton.Click += new System.EventHandler(this.SystemInitButton_Click);
+            //
             // _visionHostLabel
             //
             this._visionHostLabel.AutoSize = true;
-            this._visionHostLabel.Location = new System.Drawing.Point(431, 6);
-            this._visionHostLabel.Margin = new System.Windows.Forms.Padding(33, 0, 3, 0);
+            this._visionHostLabel.Location = new System.Drawing.Point(681, 17);
+            this._visionHostLabel.Margin = new System.Windows.Forms.Padding(33, 11, 3, 0);
             this._visionHostLabel.Name = "_visionHostLabel";
             this._visionHostLabel.Padding = new System.Windows.Forms.Padding(0, 6, 4, 0);
             this._visionHostLabel.Size = new System.Drawing.Size(77, 21);
@@ -1273,7 +1294,8 @@
             //
             // _visionHostBox
             //
-            this._visionHostBox.Location = new System.Drawing.Point(514, 9);
+            this._visionHostBox.Location = new System.Drawing.Point(764, 20);
+            this._visionHostBox.Margin = new System.Windows.Forms.Padding(3, 14, 3, 3);
             this._visionHostBox.Name = "_visionHostBox";
             this._visionHostBox.Size = new System.Drawing.Size(140, 23);
             this._visionHostBox.TabIndex = 4;
@@ -1281,7 +1303,8 @@
             //
             // _visionConnectButton
             //
-            this._visionConnectButton.Location = new System.Drawing.Point(660, 9);
+            this._visionConnectButton.Location = new System.Drawing.Point(910, 20);
+            this._visionConnectButton.Margin = new System.Windows.Forms.Padding(3, 14, 3, 3);
             this._visionConnectButton.Name = "_visionConnectButton";
             this._visionConnectButton.Size = new System.Drawing.Size(60, 23);
             this._visionConnectButton.TabIndex = 5;
@@ -1291,7 +1314,8 @@
             //
             // _visionDisconnectButton
             //
-            this._visionDisconnectButton.Location = new System.Drawing.Point(726, 9);
+            this._visionDisconnectButton.Location = new System.Drawing.Point(976, 20);
+            this._visionDisconnectButton.Margin = new System.Windows.Forms.Padding(3, 14, 3, 3);
             this._visionDisconnectButton.Name = "_visionDisconnectButton";
             this._visionDisconnectButton.Size = new System.Drawing.Size(60, 23);
             this._visionDisconnectButton.TabIndex = 6;
@@ -1301,7 +1325,8 @@
             //
             // _visionCorrectButton
             //
-            this._visionCorrectButton.Location = new System.Drawing.Point(792, 9);
+            this._visionCorrectButton.Location = new System.Drawing.Point(1042, 20);
+            this._visionCorrectButton.Margin = new System.Windows.Forms.Padding(3, 14, 3, 3);
             this._visionCorrectButton.Name = "_visionCorrectButton";
             this._visionCorrectButton.Size = new System.Drawing.Size(100, 23);
             this._visionCorrectButton.TabIndex = 7;
@@ -1313,7 +1338,8 @@
             //
             this._visionConnLabel.AutoSize = true;
             this._visionConnLabel.ForeColor = System.Drawing.Color.Red;
-            this._visionConnLabel.Location = new System.Drawing.Point(898, 6);
+            this._visionConnLabel.Location = new System.Drawing.Point(1148, 17);
+            this._visionConnLabel.Margin = new System.Windows.Forms.Padding(3, 11, 3, 0);
             this._visionConnLabel.Name = "_visionConnLabel";
             this._visionConnLabel.Padding = new System.Windows.Forms.Padding(8, 6, 0, 0);
             this._visionConnLabel.Size = new System.Drawing.Size(67, 21);
@@ -1342,6 +1368,7 @@
             this._colModuleId,
             this._colLabel,
             this._colReading,
+            this._colCorrected,
             this._colState,
             this._colRead,
             this._colZero});
@@ -1371,6 +1398,12 @@
             this._colReading.HeaderText = "측정값 (µm)";
             this._colReading.Name = "_colReading";
             this._colReading.ReadOnly = true;
+            //
+            // _colCorrected
+            //
+            this._colCorrected.HeaderText = "보정값 (µm)";
+            this._colCorrected.Name = "_colCorrected";
+            this._colCorrected.ReadOnly = true;
             // 
             // _colState
             // 
@@ -1598,6 +1631,7 @@
         private System.Windows.Forms.Label _speedLabel;
         private System.Windows.Forms.ComboBox _speedCombo;
         private System.Windows.Forms.Button _stopAllButton;
+        private System.Windows.Forms.Button _systemInitButton;
         private System.Windows.Forms.Button _stopAllNormalButton;
         private System.Windows.Forms.Label _visionHostLabel;
         private System.Windows.Forms.TextBox _visionHostBox;
@@ -1618,6 +1652,7 @@
         private System.Windows.Forms.DataGridViewTextBoxColumn _colModuleId;
         private System.Windows.Forms.DataGridViewTextBoxColumn _colLabel;
         private System.Windows.Forms.DataGridViewTextBoxColumn _colReading;
+        private System.Windows.Forms.DataGridViewTextBoxColumn _colCorrected;
         private System.Windows.Forms.DataGridViewTextBoxColumn _colState;
         private System.Windows.Forms.DataGridViewButtonColumn _colRead;
         private System.Windows.Forms.DataGridViewButtonColumn _colZero;
@@ -1652,7 +1687,7 @@
         private System.Windows.Forms.ComboBox _stageHomeDirXCombo;
         private System.Windows.Forms.ComboBox _stageHomeDirYCombo;
         private System.Windows.Forms.ComboBox _stageHomeDirZCombo;
-        private System.Windows.Forms.Button _stageSetHomeButton;
+        private System.Windows.Forms.Button _stageSaveOriginButton;
         private System.Windows.Forms.Button _stageMoveHomeButton;
         private System.Windows.Forms.FlowLayoutPanel _hexapodHomeRow;
         private System.Windows.Forms.Button _hexapodReferenceButton;

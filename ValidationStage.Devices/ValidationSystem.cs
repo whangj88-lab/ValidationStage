@@ -35,6 +35,12 @@ namespace ValidationStage.Devices
         /// <summary>이 클래스를 통해 호출한 명령 중 마지막으로 실패한 것의 원인 (없으면 null). 성공해도 지워지지 않는다.</summary>
         public DeviceError LastError { get; private set; }
 
+        // 전체 시스템 초기화 등 이 클래스 자체의 로그 (GetLogs 에 합쳐진다)
+        private readonly LogBuffer _log = new LogBuffer("System");
+
+        // 전체 시스템 초기화에서 스테이지 영점을 잡은 뒤 프로브 영점까지 기다리는 시간 (진동 안정)
+        private const int ProbeSettleMs = 500;
+
         #region 연결
 
         // 설정 파일은 모두 exe 폴더에 둔다 (실행 위치/바로가기 시작 위치와 무관하게 같은 파일을 쓰도록).
@@ -136,7 +142,8 @@ namespace ValidationStage.Devices
         /// </summary>
         public List<LogEntry> GetLogs()
         {
-            return Stage.GetLogs()
+            return _log.Drain()
+                .Concat(Stage.GetLogs())
                 .Concat(Hexapod.GetLogs())
                 .Concat(Probe.GetLogs())
                 .OrderBy(entry => entry.Time)
@@ -244,10 +251,121 @@ namespace ValidationStage.Devices
 
         #region 원점(Home)
 
+        // 전체 시스템 초기화 (HomeAndZeroProbesAsync, 참고 프로젝트의 "비전으로 마크 0 위치 → 프로브 영점" 대신):
+        //   헥사포드 TX,TY,TZ = 0 → 스테이지 기계 원점 찾기 → 저장된 측정 원점(기계 좌표)으로 이동 → 그 위치를 스테이지 0 (p0) → 프로브 영점
         // 스테이지(MMT): 컨트롤러 자체 원점을 쓴다.
         // - 기계 원점 찾기: 리밋 방향 홈 서칭 (HM0 = (−)방향, HM1 = (+)방향)
-        // - 현재 위치를 원점으로: 컨트롤러 위치를 0 으로 설정 (p0)
-        // - 원점으로 이동: 컨트롤러 좌표 0 으로 절대 이동
+        // - 측정 원점: 기계 원점 기준 좌표를 StageHost.txt 에 저장 (SaveStageMeasureOriginFromCurrent)
+        // - 원점으로 이동: 컨트롤러 좌표 0 으로 절대 이동 (전체 시스템 초기화 이후에는 측정 원점)
+        // 헥사포드는 측정 원점을 저장하지 않고 항상 TX, TY, TZ = 0 (활성 좌표계) 이다.
+
+        // 측정 원점 (스테이지 기계 좌표 µm, X,Y,Z). 저장된 적 없으면 null.
+        private double[] _stageMeasureOrigin;
+
+        /// <summary>
+        /// 전체 시스템 초기화: 헥사포드 TX, TY, TZ 를 0 (활성 좌표계)으로 → 스테이지 기계 원점 찾기 → 저장된 측정 원점으로 이동 →
+        /// 그 위치를 스테이지 0 으로 설정 → 잠깐 기다린 뒤 프로브 전체 영점. 끝나면 스테이지/헥사포드 0 = 프로브 0 위치가 된다.
+        /// 측정 원점이 저장된 적 없으면 스테이지 기계 원점 찾기까지만 하고 true 를 돌려준다 (그 뒤 측정 원점으로 쓸 위치로 옮겨
+        /// <see cref="SaveStageMeasureOriginFromCurrent"/>). 축이 크게 움직이므로 주변 간섭(프로브 접촉 포함)을 확인한 뒤 호출한다.
+        /// 시작 전 확인: 세 장비 연결, 헥사포드 레퍼런스 - 하나라도 아니면 아무것도 움직이지 않는다.
+        /// </summary>
+        public async Task<bool> HomeAndZeroProbesAsync(HomeDirection x = HomeDirection.Negative,
+            HomeDirection y = HomeDirection.Negative, HomeDirection z = HomeDirection.Negative)
+        {
+            if (!Stage.IsConnected)
+            {
+                return Fail(T("스테이지가 연결되어 있지 않습니다", "Stage not connected"));
+            }
+            double[] origin = _stageMeasureOrigin;
+            if (origin == null)
+            {
+                _log.Add(T("측정 원점이 저장되지 않아 스테이지 기계 원점 찾기만 합니다", "No measurement origin saved - stage homing only"));
+                if (!await HomeStageAsync(x, y, z))
+                {
+                    return false;
+                }
+                _log.Add(T("기계 원점 찾기 완료. 측정 원점으로 쓸 위치로 옮긴 뒤 측정 원점을 저장하세요",
+                    "Homing done. Move to the position to use as the measurement origin, then save it"));
+                return true;
+            }
+
+            if (!Hexapod.IsConnected)
+            {
+                return Fail(T("헥사포드가 연결되어 있지 않습니다", "Hexapod not connected"));
+            }
+            if (!Probe.IsConnected)
+            {
+                return Fail(T("프로브가 연결되어 있지 않습니다", "Probe not connected"));
+            }
+            if (Hexapod.IsReferenced() != true)
+            {
+                return Fail(T("헥사포드 레퍼런스가 잡혀 있지 않습니다. 레퍼런스를 먼저 하세요", "Hexapod is not referenced. Reference it first"));
+            }
+
+            _log.Add(T("전체 시스템 초기화 1/4: 헥사포드 TX, TY, TZ → 0", "System init 1/4: hexapod TX, TY, TZ -> 0"));
+            if (!await MoveHexapodToZeroAsync())
+            {
+                return false;
+            }
+            _log.Add(T("전체 시스템 초기화 2/4: 스테이지 기계 원점 찾기", "System init 2/4: stage homing"));
+            if (!await HomeStageAsync(x, y, z))
+            {
+                return false;
+            }
+            _log.Add(string.Format(CultureInfo.InvariantCulture,
+                T("전체 시스템 초기화 3/4: 스테이지 측정 원점으로 이동 (X {0:0.000}, Y {1:0.000}, Z {2:0.000} µm) 후 0 으로 설정",
+                  "System init 3/4: stage to measurement origin (X {0:0.000}, Y {1:0.000}, Z {2:0.000} um), then set as 0"),
+                origin[0], origin[1], origin[2]));
+            if (!Track(await Stage.MoveAsync(MotorizedStage.Axes, origin, true), Stage.LastError)
+                || !Track(Stage.SetZero(MotorizedStage.Axes), Stage.LastError))
+            {
+                return false;
+            }
+            _log.Add(T("전체 시스템 초기화 4/4: 프로브 전체 영점", "System init 4/4: zero all probes"));
+            await Task.Delay(ProbeSettleMs);
+            if (!Track(Probe.ZeroAll(), Probe.LastError))
+            {
+                return false;
+            }
+            _log.Add(T("전체 시스템 초기화 완료", "System init done"));
+            return true;
+        }
+
+        /// <summary>
+        /// 스테이지 현재 위치를 측정 원점으로 StageHost.txt 에 저장한다 (기계 원점 기준 좌표, 스테이지 X, Y, Z 만 - 헥사포드는 항상 0).
+        /// 연결 후 기계 원점 찾기(<see cref="HomeAndZeroProbesAsync"/>, <see cref="HomeStageAsync"/>)를 한 뒤에만 된다.
+        /// 스테이지가 멈춰 있어야 한다. 스테이지 좌표는 바꾸지 않는다.
+        /// </summary>
+        public bool SaveStageMeasureOriginFromCurrent()
+        {
+            if (!Stage.IsConnected)
+            {
+                return Fail(T("스테이지가 연결되어 있지 않습니다", "Stage not connected"));
+            }
+            if ((Stage.GetAxisStatuses() ?? new AxisStatus[0]).Any(status => status.IsMoving))
+            {
+                return Fail(T("스테이지가 이동 중입니다", "Stage is moving"));
+            }
+            double[] machine = Stage.GetMachinePositions();
+            if (machine == null)
+            {
+                return Fail(T("연결 후 기계 원점 찾기를 하지 않은 축이 있어 저장할 수 없습니다. 원점 찾기를 먼저 하세요",
+                    "Some axes have not been homed since connecting. Run homing first"));
+            }
+            _stageMeasureOrigin = machine;
+            SaveStageSettings();
+            _log.Add(string.Format(CultureInfo.InvariantCulture,
+                T("측정 원점 저장: X {0:0.000}, Y {1:0.000}, Z {2:0.000} µm (기계 원점 기준)",
+                  "Measurement origin saved: X {0:0.000}, Y {1:0.000}, Z {2:0.000} um (from machine home)"),
+                machine[0], machine[1], machine[2]));
+            return true;
+        }
+
+        /// <summary>저장된 측정 원점 (기계 원점 기준 µm, X,Y,Z). 저장된 적 없으면 null.</summary>
+        public double[] GetStageMeasureOrigin()
+        {
+            return (double[])_stageMeasureOrigin?.Clone();
+        }
 
         /// <summary>스테이지 X, Y, Z 기계 원점 찾기 (축별로 지정한 리밋 방향으로 이동, 기본은 (−)방향). 주변 간섭을 확인한 뒤 호출한다.</summary>
         public async Task<bool> HomeStageAsync(HomeDirection x = HomeDirection.Negative,
@@ -287,12 +405,6 @@ namespace ValidationStage.Devices
             return true;
         }
 
-        /// <summary>스테이지 현재 위치를 원점(0)으로 설정한다.</summary>
-        public bool SetStageZero()
-        {
-            return Track(Stage.SetZero(MotorizedStage.Axes), Stage.LastError);
-        }
-
         /// <summary>스테이지 X, Y, Z 를 원점(0)으로 이동한다.</summary>
         public async Task<bool> MoveStageToZeroAsync()
         {
@@ -327,6 +439,14 @@ namespace ValidationStage.Devices
                 LastError = deviceError;
             }
             return ok;
+        }
+
+        /// <summary>이 클래스에서 난 실패를 LastError + 로그로 남기고 false 를 돌려준다.</summary>
+        private bool Fail(string message)
+        {
+            LastError = new DeviceError(0, message);
+            _log.Add(message);
+            return false;
         }
 
         private static string SettingPath(string fileName)
@@ -370,13 +490,19 @@ namespace ValidationStage.Devices
         // StageHost.txt:
         //   Host=192.168.0.123
         //   HomeDirX=Negative   (HomeDirY, HomeDirZ 도 같은 형식, Negative / Positive)
+        //   MeasureOrigin=x,y,z (µm, 기계 원점 기준, 저장했을 때만)
         private void LoadStageSettings()
         {
+            string[] origin = null;
             foreach (var kv in ReadSettings(StageHostFile))
             {
                 if (kv.Key == "Host" && kv.Value.Length > 0)
                 {
                     StageHost = kv.Value;
+                }
+                else if (kv.Key == "MeasureOrigin")
+                {
+                    origin = kv.Value.Split(',');
                 }
                 else if (kv.Key.StartsWith("HomeDir") && Enum.TryParse(kv.Key.Substring("HomeDir".Length), out Axis axis)
                     && _stageHomeDirections.ContainsKey(axis)
@@ -385,12 +511,23 @@ namespace ValidationStage.Devices
                     _stageHomeDirections[axis] = direction;
                 }
             }
+
+            // 값이 잘못되면 저장 안 된 것으로 본다.
+            var values = new double[MotorizedStage.Axes.Length];
+            if (origin != null && origin.Length == values.Length
+                && origin.Select((text, i) => double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out values[i])).All(ok => ok))
+            {
+                _stageMeasureOrigin = values;
+            }
         }
 
         private void SaveStageSettings()
         {
             var lines = new List<string> { "Host=" + StageHost };
             lines.AddRange(_stageHomeDirections.Select(kv => $"HomeDir{kv.Key}={kv.Value}"));
+            if (_stageMeasureOrigin != null)
+            {
+                lines.Add("MeasureOrigin=" + string.Join(",", _stageMeasureOrigin.Select(v => v.ToString("R", CultureInfo.InvariantCulture))));            }
             WriteSettings(StageHostFile, lines);
         }
 

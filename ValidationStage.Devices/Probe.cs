@@ -13,6 +13,7 @@ namespace ValidationStage.Devices
     /// Solartron Orbit3 프로브 (RS232IM / USBIM / ETHIM 컨트롤러 한 대에 DP10, DP20 등 Digital Probe 모듈이
     /// 데이지체인으로 여러 개 연결된 구성). 연결된 모듈 하나 = 채널 하나이며 개수는 고정하지 않는다.
     /// 값 단위: µm. 모듈ID → 라벨(예: "TZ1") 매핑은 exe 폴더의 ProbeLabels.txt 에 저장된다.
+    /// 라벨이 X, Y, TZ1, TZ2, TX, TY1, TY2 인 7개 모듈이 있으면 <see cref="ReadAll"/> 이 기울기 보정값(<see cref="ProbeChannel.CorrectedReading"/>)도 채운다.
     /// </summary>
     /// <remarks>
     /// 읽기(<see cref="ReadAll"/>, <see cref="Read"/>)는 호출할 때마다 실제로 읽는다. 상태를 기억하지 않는다.
@@ -33,6 +34,7 @@ namespace ValidationStage.Devices
 
         private readonly LogBuffer _log = new LogBuffer("Probe");
         private readonly DeviceErrors _errors;
+        private readonly ProbeTiltCorrection _tiltCorrection;
 
         /// <param name="labelFilePath">라벨 파일. 상대 경로면 exe 폴더 기준.</param>
         public Probe(string labelFilePath = "ProbeLabels.txt")
@@ -42,6 +44,8 @@ namespace ValidationStage.Devices
                 ? labelFilePath
                 : Path.Combine(AppDomain.CurrentDomain.BaseDirectory, labelFilePath);
             LoadLabels();
+            _tiltCorrection = ProbeTiltCorrection.Load(
+                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "DoNotTouch", "ProbeTiltCorrection.xml"), _log);
         }
 
         /// <summary>Orbit 컨트롤러 연결 여부.</summary>
@@ -262,6 +266,7 @@ namespace ValidationStage.Devices
                 {
                     channels.Add(ReadChannel(modules[i], i));
                 }
+                ApplyTiltCorrection(channels);
                 return new ProbeReadResult(channels.Any(ch => ch.IsError) ? ProbeReadStatus.CommError : ProbeReadStatus.Ok, channels);
             }
             finally
@@ -448,6 +453,29 @@ namespace ValidationStage.Devices
             return channel;
         }
 
+        // 라벨 X, Y, TZ1, TZ2, TX, TY1, TY2 모듈이 하나씩 모두 정상으로 읽혔을 때만 보정값을 채운다 (아니면 모두 null).
+        private void ApplyTiltCorrection(List<ProbeChannel> channels)
+        {
+            string[] labels = ProbeTiltCorrection.Labels;
+            var targets = new ProbeChannel[labels.Length];
+            for (int i = 0; i < labels.Length; i++)
+            {
+                List<ProbeChannel> matches = channels
+                    .Where(ch => string.Equals(ch.Label?.Trim(), labels[i], StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                if (matches.Count != 1 || matches[0].IsError)
+                {
+                    return;
+                }
+                targets[i] = matches[0];
+            }
+            double[] corrected = _tiltCorrection.Apply(targets.Select(ch => ch.Reading).ToArray());
+            for (int i = 0; i < labels.Length; i++)
+            {
+                targets[i].CorrectedReading = corrected[i];
+            }
+        }
+
         private string LabelOf(string moduleId)
         {
             string label;
@@ -540,6 +568,12 @@ namespace ValidationStage.Devices
         public double Reading;
         /// <summary>영점 적용 전 원시값 (µm)</summary>
         public double RawReading;
+        /// <summary>
+        /// 기울기 보정값 (µm). <see cref="Reading"/> 에 기울기/글라스 두께 보정을 한 값 (부호는 뒤집지 않음 - 모두 +).
+        /// <see cref="Probe.ReadAll"/> 에서 라벨이 X, Y, TZ1, TZ2, TX, TY1, TY2 인 모듈이 하나씩 모두 정상으로 읽혔을 때만 값이 있고,
+        /// 그 외(다른 라벨, 7개 중 누락/중복/오류, <see cref="Probe.Read"/> 개별 읽기)는 null.
+        /// </summary>
+        public double? CorrectedReading;
         /// <summary>이 모듈 읽기 실패 여부</summary>
         public bool IsError;
         /// <summary>실패 원인 (SDK 메시지, 예: "Receive Timeout")</summary>
