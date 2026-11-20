@@ -39,7 +39,7 @@ namespace ValidationStage.Devices
         private readonly LogBuffer _log = new LogBuffer("System");
 
         // 전체 시스템 초기화에서 스테이지 영점을 잡은 뒤 프로브 영점까지 기다리는 시간 (진동 안정)
-        private const int ProbeSettleMs = 500;
+        private const int ProbeSettleMs = 1500;
 
         #region 연결
 
@@ -312,15 +312,25 @@ namespace ValidationStage.Devices
             {
                 return false;
             }
+
+            await Task.Delay(1000);
+
             _log.Add(string.Format(CultureInfo.InvariantCulture,
                 T("전체 시스템 초기화 3/4: 스테이지 측정 원점으로 이동 (X {0:0.000}, Y {1:0.000}, Z {2:0.000} µm) 후 0 으로 설정",
                   "System init 3/4: stage to measurement origin (X {0:0.000}, Y {1:0.000}, Z {2:0.000} um), then set as 0"),
                 origin[0], origin[1], origin[2]));
-            if (!Track(await Stage.MoveAsync(MotorizedStage.Axes, origin, true), Stage.LastError)
-                || !Track(Stage.SetZero(MotorizedStage.Axes), Stage.LastError))
+            if (!Track(await Stage.MoveAsync(MotorizedStage.Axes, origin, true), Stage.LastError))
+            {                
+                return false;
+            }
+
+            await Task.Delay(1000);
+
+            if (!Track(Stage.SetZero(MotorizedStage.Axes), Stage.LastError))
             {
                 return false;
             }
+
             _log.Add(T("전체 시스템 초기화 4/4: 프로브 전체 영점", "System init 4/4: zero all probes"));
             await Task.Delay(ProbeSettleMs);
             if (!Track(Probe.ZeroAll(), Probe.LastError))
