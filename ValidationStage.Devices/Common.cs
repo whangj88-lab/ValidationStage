@@ -84,6 +84,21 @@ namespace ValidationStage.Devices
         Positive = 1
     }
 
+    /// <summary>전체 시스템 초기화(<see cref="ValidationSystem.HomeAndZeroProbesAsync"/>)의 진행 단계. 실행 중이 아니면 <see cref="None"/>.</summary>
+    public enum SystemInitStep
+    {
+        /// <summary>실행 중 아님</summary>
+        None = 0,
+        /// <summary>1/4 헥사포드 TX, TY, TZ → 0</summary>
+        HexapodToZero = 1,
+        /// <summary>2/4 스테이지 기계 원점 찾기 (측정 원점이 없으면 이 단계만 한다)</summary>
+        StageHoming = 2,
+        /// <summary>3/4 스테이지 측정 원점으로 이동 후 0 설정</summary>
+        StageToOrigin = 3,
+        /// <summary>4/4 프로브 전체 영점</summary>
+        ProbeZero = 4
+    }
+
     /// <summary>
     /// 헥사포드 소프트웨어 리밋 (좌표계 하나 분량). DLL 이 이동/조그 명령을 보내기 전에 검사한다 (컨트롤러의 NLM/PLM 은 쓰지 않음).
     /// 단위 arcmin, 메인 화면 표시값(활성 좌표계 기준) 그대로. <see cref="Min"/>/<see cref="Max"/> 는 <see cref="Hexapod.Axes"/> (TX, TY, TZ) 순서.

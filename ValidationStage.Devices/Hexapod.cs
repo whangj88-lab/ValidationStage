@@ -62,6 +62,9 @@ namespace ValidationStage.Devices
         // qTMN/qTMX 가 이 컨트롤러 좌표계에서 미지원(GCS 551)이면 true - 다시 묻지 않는다.
         private bool _limitQueryUnsupported;
 
+        // 축별 정지 명령 횟수 (TX,TY,TZ 순서). MoveAsync 가 기다리는 사이 바뀌면 정지 명령으로 중단된 것으로 보고 실패를 돌려준다.
+        private readonly int[] _stopCounts = new int[3];
+
         // 좌표계 이름 → 소프트웨어 리밋. 없는 좌표계는 기본값(±300 arcmin). 저장은 ValidationSystem 이 HexapodHost.txt 에 한다.
         private readonly Dictionary<string, HexapodSoftLimit> _softLimits = new Dictionary<string, HexapodSoftLimit>();
         private readonly object _softLimitLock = new object();
@@ -293,6 +296,7 @@ namespace ValidationStage.Devices
                 }
                 CheckSoftLimit(axes, targets);
 
+                int[] stops = SnapshotStops(axes);
                 int ret = isAbsolute
                     ? PI_GCS2.MOV(_deviceId, sAxes, degrees)
                     : PI_GCS2.MVR(_deviceId, sAxes, degrees);
@@ -302,6 +306,10 @@ namespace ValidationStage.Devices
                 }
 
                 await WaitForReadyAsync();
+                if (!SnapshotStops(axes).SequenceEqual(stops))
+                {
+                    throw new DeviceException(T("이동: 정지 명령으로 중단되었습니다", "Move: interrupted by a stop command"));
+                }
                 return true;
             }
             catch (Exception ex)
@@ -437,6 +445,7 @@ namespace ValidationStage.Devices
         {
             try
             {
+                CountStop(new[] { axis });
                 if (PI_GCS2.HLT(_deviceId, PiAxisNames[(int)axis]) == PI_RESULT_FAILURE)
                 {
                     throw GcsFail(T("정지 명령 실패", "Stop command failed"));
@@ -457,6 +466,7 @@ namespace ValidationStage.Devices
             try
             {
                 CheckAxes(axes);
+                CountStop(axes);
                 string sAxes = string.Join(" ", axes.Select(axis => PiAxisNames[(int)axis]));
                 if (PI_GCS2.HLT(_deviceId, sAxes) == PI_RESULT_FAILURE)
                 {
@@ -477,6 +487,7 @@ namespace ValidationStage.Devices
         {
             try
             {
+                CountStop(Axes);
                 if (PI_GCS2.STP(_deviceId) == PI_RESULT_FAILURE)
                 {
                     throw GcsFail(T("비상 정지 명령 실패", "Emergency stop command failed"));
@@ -1163,6 +1174,24 @@ namespace ValidationStage.Devices
                 return null;
             }
             return possible[0] == 1;
+        }
+
+        // 정지 명령을 보내기 전에 센다 (이동을 기다리는 쪽이 멈춘 것을 보기 전에 값이 바뀌어 있도록).
+        private void CountStop(Axis[] axes)
+        {
+            foreach (Axis axis in axes)
+            {
+                int index = Array.IndexOf(Axes, axis);
+                if (index >= 0)
+                {
+                    Interlocked.Increment(ref _stopCounts[index]);
+                }
+            }
+        }
+
+        private int[] SnapshotStops(Axis[] axes)
+        {
+            return axes.Select(axis => Volatile.Read(ref _stopCounts[Array.IndexOf(Axes, axis)])).ToArray();
         }
 
         private async Task WaitForReadyAsync()

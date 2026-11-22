@@ -111,6 +111,11 @@ system.DisconnectAll();
   기계 원점 찾기(HomeStageAsync) -> 조그로 측정 위치에 맞춤 -> system.SaveStageMeasureOriginFromCurrent()
   (기계 원점 기준 좌표를 StageHost.txt 에 저장).
   스테이지 현재 위치를 임의로 0 으로 바꾸는 기능은 없습니다 (운용 중 원점이 바뀌는 실수 방지).
+  실행 중 상태: system.IsSystemInitRunning, system.CurrentSystemInitStep (SystemInitStep 1~4 단계).
+  실행 중 system.EmergencyStopAllAsync() 또는 StopAllAsync() 를 부르면 그 자리에서 중단하고 다음 단계로 넘어가지 않습니다
+  (false 반환, system.SystemInitAborted = true). 실행 중에는 다른 이동 명령을 보내지 마십시오 (샘플은 비상 정지 외 화면을 막음).
+- 이동/원점 찾기(MoveAsync, MoveAbsAsync, HomeStageAsync 등)는 기다리는 사이 그 축에 정지/비상 정지 명령이 들어오면
+  멈춘 뒤 false 를 돌려줍니다 (LastError = "정지 명령으로 중단"). 원점 찾기가 중단되면 그 축은 다시 원점 찾기를 해야 합니다.
 - 프로브 기울기 보정: 라벨이 X, Y, TZ1, TZ2, TX, TY1, TY2 인 모듈 7개가 있으면 ReadAll 결과의 ProbeChannel.CorrectedReading
   (µm) 에 보정값이 들어갑니다 (Reading = 영점 적용 값, 보정 전). 7개 중 하나라도 없거나 오류면 null 입니다.
   부호는 뒤집지 않습니다 (모두 +). 반대 방향이 필요하면 가져가서 부호를 바꿔 쓰십시오.

@@ -227,9 +227,11 @@ namespace ValidationStage.Devices
         /// <summary>
         /// 전체 감속 정지 (연결된 장비만). 스테이지: 세 축 "S", 헥사포드: 세 축 HLT.
         /// 비상 정지(<see cref="EmergencyStopAllAsync"/>)와의 차이는 헥사포드뿐이다 - MMT 는 정지 명령이 "S" 하나뿐.
+        /// 전체 시스템 초기화 중이면 초기화도 중단된다.
         /// </summary>
         public async Task StopAllAsync()
         {
+            RequestSystemInitStop();
             if (Stage.IsConnected)
             {
                 Track(await Stage.StopAsync(MotorizedStage.Axes), Stage.LastError);
@@ -240,9 +242,10 @@ namespace ValidationStage.Devices
             }
         }
 
-        /// <summary>전체 비상 정지 (연결된 장비만). 스테이지: "@s", 헥사포드: STP.</summary>
+        /// <summary>전체 비상 정지 (연결된 장비만). 스테이지: "@s", 헥사포드: STP. 전체 시스템 초기화 중이면 초기화도 중단된다.</summary>
         public async Task EmergencyStopAllAsync()
         {
+            RequestSystemInitStop();
             if (Stage.IsConnected)
             {
                 Track(await Stage.StopEmergencyAsync(), Stage.LastError);
@@ -274,9 +277,97 @@ namespace ValidationStage.Devices
         /// 측정 원점이 저장된 적 없으면 스테이지 기계 원점 찾기까지만 하고 true 를 돌려준다 (그 뒤 측정 원점으로 쓸 위치로 옮겨
         /// <see cref="SaveStageMeasureOriginFromCurrent"/>). 축이 크게 움직이므로 주변 간섭(프로브 접촉 포함)을 확인한 뒤 호출한다.
         /// 시작 전 확인: 세 장비 연결, 헥사포드 레퍼런스 - 하나라도 아니면 아무것도 움직이지 않는다.
+        /// 실행 중 진행 단계는 <see cref="CurrentSystemInitStep"/> 으로 조회한다. 실행 중에 <see cref="EmergencyStopAllAsync"/> 나
+        /// <see cref="StopAllAsync"/> 를 부르면 그 자리에서 중단하고(다음 단계로 넘어가지 않음) false 를 돌려주며,
+        /// 이때 <see cref="SystemInitAborted"/> 가 true 다. 이미 실행 중이면 바로 false.
         /// </summary>
         public async Task<bool> HomeAndZeroProbesAsync(HomeDirection x = HomeDirection.Negative,
             HomeDirection y = HomeDirection.Negative, HomeDirection z = HomeDirection.Negative)
+        {
+            if (_systemInitRunning)
+            {
+                return Fail(T("전체 시스템 초기화가 이미 실행 중입니다", "System init is already running"));
+            }
+            _systemInitRunning = true;
+            _systemInitStopRequested = false;
+            SystemInitAborted = false;
+            try
+            {
+                return await RunSystemInitAsync(x, y, z);
+            }
+            finally
+            {
+                _systemInitStep = (int)SystemInitStep.None;
+                _systemInitRunning = false;
+            }
+        }
+
+        /// <summary>전체 시스템 초기화(<see cref="HomeAndZeroProbesAsync"/>) 실행 중 여부.</summary>
+        public bool IsSystemInitRunning => _systemInitRunning;
+
+        /// <summary>전체 시스템 초기화의 현재 단계 (실행 중이 아니면 <see cref="SystemInitStep.None"/>).</summary>
+        public SystemInitStep CurrentSystemInitStep => (SystemInitStep)_systemInitStep;
+
+        /// <summary>마지막 전체 시스템 초기화가 정지/비상 정지 명령으로 중단됐으면 true (다음 실행을 시작하면 false 로 돌아간다).</summary>
+        public bool SystemInitAborted { get; private set; }
+
+        private volatile bool _systemInitRunning;
+        private volatile bool _systemInitStopRequested;
+        private volatile int _systemInitStep;
+
+        // 정지/비상 정지가 눌리면 초기화가 다음 단계로 넘어가지 않게 표시한다 (이동 중이던 단계는 장비 쪽에서 실패로 끝난다).
+        private void RequestSystemInitStop()
+        {
+            if (_systemInitRunning)
+            {
+                _systemInitStopRequested = true;
+            }
+        }
+
+        // 정지 요청이 들어왔으면 중단 처리 (LastError + 로그) 후 true.
+        private bool CheckSystemInitAborted()
+        {
+            if (!_systemInitStopRequested)
+            {
+                return false;
+            }
+            SystemInitAborted = true;
+            Fail(T("전체 시스템 초기화가 정지 명령으로 중단되었습니다", "System init was interrupted by a stop command"));
+            return true;
+        }
+
+        // 단계 하나의 결과: 정지 요청으로 실패했으면 그 원인을 "중단"으로 바꿔 남긴다.
+        private bool StepOk(bool ok)
+        {
+            if (CheckSystemInitAborted())
+            {
+                return false;
+            }
+            return ok;
+        }
+
+        // 단계 사이 대기. 기다리는 동안 정지 요청이 들어오면 바로 중단한다 (false).
+        private async Task<bool> SystemInitDelayAsync(int milliseconds)
+        {
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            while (watch.ElapsedMilliseconds < milliseconds)
+            {
+                if (CheckSystemInitAborted())
+                {
+                    return false;
+                }
+                await Task.Delay(Math.Min(50, Math.Max(1, milliseconds - (int)watch.ElapsedMilliseconds)));
+            }
+            return !CheckSystemInitAborted();
+        }
+
+        private void EnterStep(SystemInitStep step, string message)
+        {
+            _systemInitStep = (int)step;
+            _log.Add(message);
+        }
+
+        private async Task<bool> RunSystemInitAsync(HomeDirection x, HomeDirection y, HomeDirection z)
         {
             if (!Stage.IsConnected)
             {
@@ -285,8 +376,9 @@ namespace ValidationStage.Devices
             double[] origin = _stageMeasureOrigin;
             if (origin == null)
             {
-                _log.Add(T("측정 원점이 저장되지 않아 스테이지 기계 원점 찾기만 합니다", "No measurement origin saved - stage homing only"));
-                if (!await HomeStageAsync(x, y, z))
+                EnterStep(SystemInitStep.StageHoming,
+                    T("측정 원점이 저장되지 않아 스테이지 기계 원점 찾기만 합니다", "No measurement origin saved - stage homing only"));
+                if (!StepOk(await HomeStageAsync(x, y, z)))
                 {
                     return false;
                 }
@@ -308,38 +400,33 @@ namespace ValidationStage.Devices
                 return Fail(T("헥사포드 레퍼런스가 잡혀 있지 않습니다. 레퍼런스를 먼저 하세요", "Hexapod is not referenced. Reference it first"));
             }
 
-            _log.Add(T("전체 시스템 초기화 1/4: 헥사포드 TX, TY, TZ → 0", "System init 1/4: hexapod TX, TY, TZ -> 0"));
-            if (!await MoveHexapodToZeroAsync())
+            EnterStep(SystemInitStep.HexapodToZero, T("전체 시스템 초기화 1/4: 헥사포드 TX, TY, TZ → 0", "System init 1/4: hexapod TX, TY, TZ -> 0"));
+            if (!StepOk(await MoveHexapodToZeroAsync()))
             {
                 return false;
             }
-            _log.Add(T("전체 시스템 초기화 2/4: 스테이지 기계 원점 찾기", "System init 2/4: stage homing"));
-            if (!await HomeStageAsync(x, y, z))
+            EnterStep(SystemInitStep.StageHoming, T("전체 시스템 초기화 2/4: 스테이지 기계 원점 찾기", "System init 2/4: stage homing"));
+            if (!StepOk(await HomeStageAsync(x, y, z)) || !await SystemInitDelayAsync(StageHomeSettleMs))
             {
                 return false;
             }
 
-            await Task.Delay(StageHomeSettleMs);
-
-            _log.Add(string.Format(CultureInfo.InvariantCulture,
+            EnterStep(SystemInitStep.StageToOrigin, string.Format(CultureInfo.InvariantCulture,
                 T("전체 시스템 초기화 3/4: 스테이지 측정 원점으로 이동 (X {0:0.000}, Y {1:0.000}, Z {2:0.000} µm) 후 0 으로 설정",
                   "System init 3/4: stage to measurement origin (X {0:0.000}, Y {1:0.000}, Z {2:0.000} um), then set as 0"),
                 origin[0], origin[1], origin[2]));
-            if (!Track(await Stage.MoveAsync(MotorizedStage.Axes, origin, true), Stage.LastError))
-            {                
+            if (!StepOk(Track(await Stage.MoveAsync(MotorizedStage.Axes, origin, true), Stage.LastError))
+                || !await SystemInitDelayAsync(StageHomeSettleMs))
+            {
                 return false;
             }
-
-            await Task.Delay(StageHomeSettleMs);
-
-            if (!Track(Stage.SetZero(MotorizedStage.Axes), Stage.LastError))
+            if (!StepOk(Track(Stage.SetZero(MotorizedStage.Axes), Stage.LastError)))
             {
                 return false;
             }
 
-            _log.Add(T("전체 시스템 초기화 4/4: 프로브 전체 영점", "System init 4/4: zero all probes"));
-            await Task.Delay(ProbeSettleMs);
-            if (!Track(Probe.ZeroAll(), Probe.LastError))
+            EnterStep(SystemInitStep.ProbeZero, T("전체 시스템 초기화 4/4: 프로브 전체 영점", "System init 4/4: zero all probes"));
+            if (!await SystemInitDelayAsync(ProbeSettleMs) || !StepOk(Track(Probe.ZeroAll(), Probe.LastError)))
             {
                 return false;
             }

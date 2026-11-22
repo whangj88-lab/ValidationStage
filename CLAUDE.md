@@ -454,7 +454,18 @@ per-axis machine offset (machine = displayed + offset; NaN after `Connect`/faile
 sequence. Rationale (worked out with the user): A's correction is linear except tiny sin/cos terms, so the exact zero
 location barely matters (≈0.003 µm for a 10 arcmin TZ offset) — what matters is a repeatable pose. User decisions:
 homing is part of the sequence (warning dialog mentions probe contact). `ValidationSystem` has its own
-`LogBuffer("System")` merged into `GetLogs()`. Not yet run on hardware. Hexapod: only `MoveHexapodToZeroAsync` (TX,TY,TZ → 0 in the active CS). **The hexapod "save current
+`LogBuffer("System")` merged into `GetLogs()`. Not yet run on hardware.
+**Stop during the sequence (2026-11-23, user-reported: e-stop during init didn't stop it — the next step ran):** cause was
+that `MotorizedStage.MoveAsync`/`HomeAsync` and `Hexapod.MoveAsync` waited until stopped and then returned true
+regardless. Now each device keeps a per-axis stop counter (`CountStop`, bumped *before* sending `s`/`@s`/HLT/STP,
+incl. `JogStop`); a move/home whose axes got a stop while waiting returns false ("정지 명령으로 중단"; homing then leaves
+the machine offset NaN). `StopAllAsync`/`EmergencyStopAllAsync` also set `_systemInitStopRequested`, checked after
+every step and inside the settle delays (`SystemInitDelayAsync`) → `SystemInitAborted = true`, false. Public polling
+state: `IsSystemInitRunning`, `CurrentSystemInitStep` (`SystemInitStep` enum in Common.cs); re-entry is refused.
+Sample: while running, `LockUiForSystemInit` disables every control except [전체 정지 (비상)] and the log box (restores
+the saved Enabled states after); `_systemInitBanner` (Dock Top label under `_speedPanel`, hidden by default) shows
+orange "초기화 중 + step + elapsed", then green done / red aborted/failed (click to close) + a MessageBox; closing the
+form is refused while running. Hexapod: only `MoveHexapodToZeroAsync` (TX,TY,TZ → 0 in the active CS). **The hexapod "save current
 as home" feature (`SetHexapodHomeFromCurrent`/`MoveHexapodHomeAsync`/`HexapodHome.txt`, ported from A's
 `SetHome6DFormCurPos`/`MoveHome6D`) was removed 2026-10-07 (user decision):** it only remembered a pose, the display
 never became 0 (confusing next to the stage's `p0` button of the same name), absolute move covers it, and the saved

@@ -224,6 +224,14 @@ namespace ValidationStage
 
         private void F_Main_FormClosing(object sender, FormClosingEventArgs e)
         {
+            if (_system.IsSystemInitRunning && e.CloseReason == CloseReason.UserClosing)
+            {
+                // 이동 중에 연결을 끊지 않도록 막는다. 멈추려면 [전체 정지 (비상)].
+                MessageBox.Show("전체 시스템 초기화 중에는 종료할 수 없습니다.\n멈추려면 [전체 정지 (비상)]을 누르세요.",
+                    "전체 시스템 초기화", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                e.Cancel = true;
+                return;
+            }
             _statusTimer.Stop();
             _probeTimer.Stop();
             _vision.Disconnect();
@@ -613,14 +621,158 @@ namespace ValidationStage
             {
                 return;
             }
-            _systemInitButton.Enabled = false;
-            if (!await _system.HomeAndZeroProbesAsync(x, y, z))
+            // 실행 중에는 [전체 정지 (비상)]만 누를 수 있게 나머지 화면을 막고, 진행 상태를 배너로 보여 준다 (StatusTimer_Tick 이 갱신).
+            _systemInitHasOrigin = hasOrigin;
+            _systemInitLastStep = SystemInitStep.None;
+            _systemInitWatch.Restart();
+            LockUiForSystemInit();
+            ShowSystemInitBanner(SystemInitBannerRunning, "전체 시스템 초기화 시작 중...");
+            _systemInitButton.Text = "초기화 진행 중...";
+
+            bool ok = await _system.HomeAndZeroProbesAsync(x, y, z);
+            _systemInitWatch.Stop();
+            SystemInitStep failedStep = _systemInitLastStep;
+            string elapsed = $"소요 {_systemInitWatch.Elapsed.TotalSeconds:0}초, {DateTime.Now:HH:mm:ss}";
+
+            _systemInitButton.Text = "▶ 전체 시스템 초기화";
+            UnlockUiAfterSystemInit();
+
+            if (ok)
+            {
+                string done = hasOrigin
+                    ? "✔ 전체 시스템 초기화 완료"
+                    : "✔ 기계 원점 찾기 완료 - 측정 원점으로 쓸 위치로 옮긴 뒤 [측정 원점 저장]";
+                ShowSystemInitBanner(SystemInitBannerDone, $"{done}   ({elapsed})");
+                MessageBox.Show(hasOrigin
+                        ? "전체 시스템 초기화가 완료되었습니다.\n스테이지/헥사포드 0 위치에서 프로브 영점이 잡혔습니다."
+                        : "기계 원점 찾기가 완료되었습니다.\n측정 원점으로 쓸 위치로 옮긴 뒤 [측정 원점 저장]을 누르세요.",
+                    "전체 시스템 초기화", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            else if (_system.SystemInitAborted)
+            {
+                ShowSystemInitBanner(SystemInitBannerFailed,
+                    $"■ 전체 시스템 초기화 중단됨 (정지 명령) - {SystemInitStepText(failedStep)} 단계에서 멈춤   ({elapsed})");
+                MessageBox.Show($"정지 명령으로 전체 시스템 초기화를 중단했습니다.\n중단 단계: {SystemInitStepText(failedStep)}\n\n" +
+                    "원점/영점이 잡히지 않은 상태입니다. 주변을 확인한 뒤 다시 실행하세요.",
+                    "전체 시스템 초기화", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            else
             {
                 // 실패 원인은 DLL 로그에 이미 남는다 (LastError 와 같은 내용).
-                MessageBox.Show("전체 시스템 초기화 실패:\n" + _system.LastError, "전체 시스템 초기화", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                string where = failedStep == SystemInitStep.None ? "시작 전 확인" : SystemInitStepText(failedStep);
+                ShowSystemInitBanner(SystemInitBannerFailed, $"✖ 전체 시스템 초기화 실패 - {where}   ({elapsed})");
+                MessageBox.Show($"전체 시스템 초기화 실패 ({where}):\n" + _system.LastError, "전체 시스템 초기화",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
-            _systemInitButton.Enabled = true;
         }
+
+        #region 전체 시스템 초기화 표시 / 화면 잠금
+
+        private static readonly Color SystemInitBannerRunning = Color.DarkOrange;
+        private static readonly Color SystemInitBannerDone = Color.ForestGreen;
+        private static readonly Color SystemInitBannerFailed = Color.Firebrick;
+
+        private readonly System.Diagnostics.Stopwatch _systemInitWatch = new System.Diagnostics.Stopwatch();
+        private bool _systemInitHasOrigin;
+        private SystemInitStep _systemInitLastStep;   // 끝났을 때 어느 단계였는지 (DLL 은 끝나면 None 으로 돌아간다)
+        private bool _systemInitStopPressed;
+
+        // 초기화 중 막아 둔 컨트롤과 원래 Enabled 상태
+        private readonly Dictionary<Control, bool> _systemInitLocked = new Dictionary<Control, bool>();
+
+        private string SystemInitStepText(SystemInitStep step)
+        {
+            if (!_systemInitHasOrigin)
+            {
+                return "스테이지 기계 원점 찾기 (측정 원점 없음)";
+            }
+            switch (step)
+            {
+                case SystemInitStep.HexapodToZero: return "1/4 헥사포드 TX, TY, TZ → 0";
+                case SystemInitStep.StageHoming: return "2/4 스테이지 기계 원점 찾기";
+                case SystemInitStep.StageToOrigin: return "3/4 측정 원점으로 이동 후 스테이지 0 설정";
+                case SystemInitStep.ProbeZero: return "4/4 프로브 전체 영점";
+                default: return "시작 전 확인";
+            }
+        }
+
+        private void ShowSystemInitBanner(Color color, string text)
+        {
+            _systemInitBanner.BackColor = color;
+            _systemInitBanner.Text = text;
+            _systemInitBanner.Visible = true;
+        }
+
+        /// <summary>StatusTimer_Tick 에서 호출: 실행 중이면 단계/경과 시간을 배너에 표시한다.</summary>
+        private void UpdateSystemInitBanner()
+        {
+            if (!_system.IsSystemInitRunning)
+            {
+                return;
+            }
+            SystemInitStep step = _system.CurrentSystemInitStep;
+            if (step != SystemInitStep.None)
+            {
+                _systemInitLastStep = step;
+            }
+            string dots = new string('.', 1 + (int)(_systemInitWatch.ElapsedMilliseconds / 500 % 3));
+            string text = _systemInitStopPressed
+                ? $"■ 정지 명령 - 초기화 중단 중{dots}   ({SystemInitStepText(_systemInitLastStep)})"
+                : $"⏳ 전체 시스템 초기화 중{dots}   {SystemInitStepText(_systemInitLastStep)}   " +
+                  $"(경과 {_systemInitWatch.Elapsed.TotalSeconds:0}초)   ※ [전체 정지 (비상)]만 누를 수 있습니다";
+            if (_systemInitBanner.Text != text)
+            {
+                _systemInitBanner.Text = text;
+            }
+            _systemInitBanner.BackColor = _systemInitStopPressed ? SystemInitBannerFailed : SystemInitBannerRunning;
+        }
+
+        // 결과 배너는 클릭하면 닫는다 (실행 중에는 닫지 않음).
+        private void SystemInitBanner_Click(object sender, EventArgs e)
+        {
+            if (!_system.IsSystemInitRunning)
+            {
+                _systemInitBanner.Visible = false;
+            }
+        }
+
+        /// <summary>[전체 정지 (비상)] 와 로그창(스크롤용)만 남기고 화면의 모든 입력을 막는다.</summary>
+        private void LockUiForSystemInit()
+        {
+            _systemInitStopPressed = false;
+            _systemInitLocked.Clear();
+            LockChildren(this);
+        }
+
+        private void LockChildren(Control parent)
+        {
+            foreach (Control control in parent.Controls)
+            {
+                if (control == _stopAllButton || control == _logBox || control == _systemInitBanner)
+                {
+                    continue;
+                }
+                if (control.Contains(_stopAllButton))
+                {
+                    LockChildren(control);   // 비상 정지 버튼이 든 패널은 패널 자체는 두고 안쪽만 막는다
+                    continue;
+                }
+                _systemInitLocked[control] = control.Enabled;
+                control.Enabled = false;
+            }
+        }
+
+        private void UnlockUiAfterSystemInit()
+        {
+            foreach (KeyValuePair<Control, bool> pair in _systemInitLocked)
+            {
+                pair.Key.Enabled = pair.Value;
+            }
+            _systemInitLocked.Clear();
+            UpdateProbeButtons();   // 그 사이 프로브 연결 상태가 바뀌었을 수 있다
+        }
+
+        #endregion
 
         private void StageSaveOriginButton_Click(object sender, EventArgs e)
         {
@@ -677,7 +829,12 @@ namespace ValidationStage
 
         private async void StopAllButton_Click(object sender, EventArgs e)
         {
-            Task stop = _system.EmergencyStopAllAsync();
+            Task stop = _system.EmergencyStopAllAsync();   // 전체 시스템 초기화 중이면 DLL 이 초기화도 중단한다
+            if (_system.IsSystemInitRunning)
+            {
+                _systemInitStopPressed = true;
+                UpdateSystemInitBanner();
+            }
             RequireAnyMotionConnected();
             await stop;
         }
@@ -911,6 +1068,7 @@ namespace ValidationStage
             UpdateConnectionLabel(_system.Hexapod.IsConnected, ref _hexapodConnected, _hexapodConnLabel);
             UpdateConnectionLabel(_vision.IsConnected, ref _visionConnected, _visionConnLabel);
             UpdateAxisStatuses(_system.GetAxisStatuses());
+            UpdateSystemInitBanner();
             foreach (LogEntry entry in _system.GetLogs())
             {
                 AppendLog(entry.ToString(), entry.Time);

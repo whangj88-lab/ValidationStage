@@ -85,6 +85,9 @@ namespace ValidationStage.Devices
         // 원점 찾기 성공 = 0, p0 = 오프셋 += 그때 위치. 모르면 NaN (연결 직후 - 그 사이 컨트롤러 전원이 꺼졌을 수 있음, 원점 찾기 실패).
         private readonly double[] _machineOffsets = { double.NaN, double.NaN, double.NaN };
 
+        // 축별 정지 명령 횟수 (X,Y,Z 순서). 이동/원점 찾기가 기다리는 사이 이 값이 바뀌면 정지 명령으로 중단된 것으로 보고 실패를 돌려준다.
+        private readonly int[] _stopCounts = new int[3];
+
         private readonly LogBuffer _log = new LogBuffer("Stage");
         private readonly DeviceErrors _errors;
 
@@ -224,6 +227,7 @@ namespace ValidationStage.Devices
                     throw new DeviceException(T("이동 명령: 축 개수와 위치 개수가 다릅니다", "Move: number of axes and positions differ"));
                 }
 
+                int[] stops = SnapshotStops(axes);
                 // MA: 0 상대 / 1 절대 이동 (매뉴얼 9.1.14). 모든 축 설정 후 한꺼번에 G.
                 for (int i = 0; i < axes.Length; i++)
                 {
@@ -237,6 +241,7 @@ namespace ValidationStage.Devices
                 }
 
                 await WaitForStopAsync(axes);
+                CheckNotStopped(axes, stops, T("이동", "Move"));
                 return true;
             }
             catch (Exception ex)
@@ -268,6 +273,7 @@ namespace ValidationStage.Devices
             try
             {
                 CheckConnected();
+                CountStop(new[] { axis });
                 ExpectOk(Query($"{AxisNo(axis)}s"));
                 // 감속 정지를 기다려야 하므로 호출한 스레드를 막지 않게 백그라운드에서 busy 를 해제한다.
                 Task.Run(() => ClearBusyAfterStopSafe(axis));
@@ -289,6 +295,7 @@ namespace ValidationStage.Devices
             try
             {
                 CheckConnected();
+                CountStop(axes);
                 foreach (Axis axis in axes)
                 {
                     ExpectOk(Query($"{AxisNo(axis)}s"));
@@ -316,6 +323,7 @@ namespace ValidationStage.Devices
             try
             {
                 CheckConnected();
+                CountStop(Axes);
                 ExpectOk(Query("@s"));
                 _log.Add(T("비상 정지", "Emergency stop"));
                 await Task.Run(() =>
@@ -366,6 +374,7 @@ namespace ValidationStage.Devices
                     WriteIfDifferent(axisNo, "hmvf", speed / 10);
                 }
                 SetMachineOffsets(axes, double.NaN);   // 끝까지 성공해야 기계 좌표가 된다
+                int[] stops = SnapshotStops(axes);
                 for (int i = 0; i < axes.Length; i++)
                 {
                     int axisNo = AxisNo(axes[i]);
@@ -382,6 +391,8 @@ namespace ValidationStage.Devices
                 _log.Add(T("원점 찾는 중...", "Homing..."));
 
                 await WaitForStopAsync(axes);
+                // 정지 명령으로 멈췄으면 원점을 못 찾은 것이므로 기계 좌표를 모르는 채(NaN)로 둔다.
+                CheckNotStopped(axes, stops, T("원점 찾기", "Homing"));
                 SetMachineOffsets(axes, 0);
                 _log.Add(T("원점 찾기 완료", "Homing done"));
                 return true;
@@ -913,6 +924,33 @@ namespace ValidationStage.Devices
             }
             _stream = null;
             _client = null;
+        }
+
+        // 정지 명령을 보내기 전에 센다 (이동을 기다리는 쪽이 멈춘 것을 보기 전에 값이 바뀌어 있도록).
+        private void CountStop(Axis[] axes)
+        {
+            foreach (Axis axis in axes)
+            {
+                int index = Array.IndexOf(Axes, axis);
+                if (index >= 0)
+                {
+                    Interlocked.Increment(ref _stopCounts[index]);
+                }
+            }
+        }
+
+        private int[] SnapshotStops(Axis[] axes)
+        {
+            return axes.Select(axis => Volatile.Read(ref _stopCounts[Array.IndexOf(Axes, axis)])).ToArray();
+        }
+
+        // 이동을 기다리는 사이 그 축에 정지 명령(정지/비상 정지/조그 정지)이 들어왔으면 실패로 처리한다.
+        private void CheckNotStopped(Axis[] axes, int[] snapshot, string what)
+        {
+            if (!SnapshotStops(axes).SequenceEqual(snapshot))
+            {
+                throw new DeviceException(T($"{what}: 정지 명령으로 중단되었습니다", $"{what}: interrupted by a stop command"));
+            }
         }
 
         private async Task WaitForStopAsync(Axis[] axes)

@@ -59,15 +59,15 @@
             this._hexapodHomeRow = new System.Windows.Forms.FlowLayoutPanel();
             this._hexapodReferenceButton = new System.Windows.Forms.Button();
             this._hexapodMoveHomeButton = new System.Windows.Forms.Button();
-            this._hexapodCoordSystemButton = new System.Windows.Forms.Button();
-            this._hexapod3DButton = new System.Windows.Forms.Button();
-            this._hexapodSoftLimitButton = new System.Windows.Forms.Button();
             this._hexapodConnRow = new System.Windows.Forms.FlowLayoutPanel();
             this._hexapodHostLabel = new System.Windows.Forms.Label();
             this._hexapodHostBox = new System.Windows.Forms.TextBox();
             this._hexapodScanButton = new System.Windows.Forms.Button();
             this._hexapodConnectButton = new System.Windows.Forms.Button();
             this._hexapodDisconnectButton = new System.Windows.Forms.Button();
+            this._hexapodCoordSystemButton = new System.Windows.Forms.Button();
+            this._hexapod3DButton = new System.Windows.Forms.Button();
+            this._hexapodSoftLimitButton = new System.Windows.Forms.Button();
             this._hexapodConnLabel = new System.Windows.Forms.Label();
             this._stageGroup = new System.Windows.Forms.GroupBox();
             this._stageAxisTable = new System.Windows.Forms.TableLayoutPanel();
@@ -114,17 +114,18 @@
             this._stageDirectionButton = new System.Windows.Forms.Button();
             this._stageConnLabel = new System.Windows.Forms.Label();
             this._speedPanel = new System.Windows.Forms.FlowLayoutPanel();
+            this._systemInitButton = new System.Windows.Forms.Button();
             this._speedLabel = new System.Windows.Forms.Label();
             this._speedCombo = new System.Windows.Forms.ComboBox();
             this._stopAllNormalButton = new System.Windows.Forms.Button();
             this._stopAllButton = new System.Windows.Forms.Button();
-            this._systemInitButton = new System.Windows.Forms.Button();
             this._visionHostLabel = new System.Windows.Forms.Label();
             this._visionHostBox = new System.Windows.Forms.TextBox();
             this._visionConnectButton = new System.Windows.Forms.Button();
             this._visionDisconnectButton = new System.Windows.Forms.Button();
             this._visionCorrectButton = new System.Windows.Forms.Button();
             this._visionConnLabel = new System.Windows.Forms.Label();
+            this._systemInitBanner = new System.Windows.Forms.Label();
             this._probeGroup = new System.Windows.Forms.GroupBox();
             this._probeGrid = new System.Windows.Forms.DataGridView();
             this._colModuleId = new System.Windows.Forms.DataGridViewTextBoxColumn();
@@ -530,9 +531,9 @@
             this._hexapodHomeRow.Padding = new System.Windows.Forms.Padding(6);
             this._hexapodHomeRow.Size = new System.Drawing.Size(678, 36);
             this._hexapodHomeRow.TabIndex = 2;
-            //
+            // 
             // _hexapodReferenceButton
-            //
+            // 
             this._hexapodReferenceButton.Location = new System.Drawing.Point(9, 9);
             this._hexapodReferenceButton.Name = "_hexapodReferenceButton";
             this._hexapodReferenceButton.Size = new System.Drawing.Size(80, 23);
@@ -550,39 +551,9 @@
             this._hexapodMoveHomeButton.Text = "원점으로 이동";
             this._hexapodMoveHomeButton.UseVisualStyleBackColor = true;
             this._hexapodMoveHomeButton.Click += new System.EventHandler(this.HexapodMoveHomeButton_Click);
-            //
-            // _hexapodCoordSystemButton
-            //
-            this._hexapodCoordSystemButton.Location = new System.Drawing.Point(363, 9);
-            this._hexapodCoordSystemButton.Name = "_hexapodCoordSystemButton";
-            this._hexapodCoordSystemButton.Size = new System.Drawing.Size(70, 23);
-            this._hexapodCoordSystemButton.TabIndex = 4;
-            this._hexapodCoordSystemButton.Text = "좌표계";
-            this._hexapodCoordSystemButton.UseVisualStyleBackColor = true;
-            this._hexapodCoordSystemButton.Click += new System.EventHandler(this.HexapodCoordSystemButton_Click);
             // 
-            // _hexapod3DButton
-            // 
-            this._hexapod3DButton.Location = new System.Drawing.Point(439, 9);
-            this._hexapod3DButton.Name = "_hexapod3DButton";
-            this._hexapod3DButton.Size = new System.Drawing.Size(70, 23);
-            this._hexapod3DButton.TabIndex = 5;
-            this._hexapod3DButton.Text = "3D 보기";
-            this._hexapod3DButton.UseVisualStyleBackColor = true;
-            this._hexapod3DButton.Click += new System.EventHandler(this.Hexapod3DButton_Click);
-            //
-            // _hexapodSoftLimitButton
-            //
-            this._hexapodSoftLimitButton.Location = new System.Drawing.Point(515, 9);
-            this._hexapodSoftLimitButton.Name = "_hexapodSoftLimitButton";
-            this._hexapodSoftLimitButton.Size = new System.Drawing.Size(80, 23);
-            this._hexapodSoftLimitButton.TabIndex = 6;
-            this._hexapodSoftLimitButton.Text = "소프트 리밋";
-            this._hexapodSoftLimitButton.UseVisualStyleBackColor = true;
-            this._hexapodSoftLimitButton.Click += new System.EventHandler(this.HexapodSoftLimitButton_Click);
-            //
             // _hexapodConnRow
-            //
+            // 
             this._hexapodConnRow.Controls.Add(this._hexapodHostLabel);
             this._hexapodConnRow.Controls.Add(this._hexapodHostBox);
             this._hexapodConnRow.Controls.Add(this._hexapodScanButton);
@@ -618,7 +589,7 @@
             this._hexapodHostBox.Text = "127.0.0.1";
             // 
             // _hexapodScanButton
-            //
+            // 
             this._hexapodScanButton.Location = new System.Drawing.Point(165, 9);
             this._hexapodScanButton.Name = "_hexapodScanButton";
             this._hexapodScanButton.Size = new System.Drawing.Size(60, 23);
@@ -626,9 +597,9 @@
             this._hexapodScanButton.Text = "스캔";
             this._hexapodScanButton.UseVisualStyleBackColor = true;
             this._hexapodScanButton.Click += new System.EventHandler(this.HexapodScanButton_Click);
-            //
+            // 
             // _hexapodConnectButton
-            //
+            // 
             this._hexapodConnectButton.Location = new System.Drawing.Point(231, 9);
             this._hexapodConnectButton.Name = "_hexapodConnectButton";
             this._hexapodConnectButton.Size = new System.Drawing.Size(60, 23);
@@ -646,6 +617,36 @@
             this._hexapodDisconnectButton.Text = "해제";
             this._hexapodDisconnectButton.UseVisualStyleBackColor = true;
             this._hexapodDisconnectButton.Click += new System.EventHandler(this.HexapodDisconnectButton_Click);
+            // 
+            // _hexapodCoordSystemButton
+            // 
+            this._hexapodCoordSystemButton.Location = new System.Drawing.Point(363, 9);
+            this._hexapodCoordSystemButton.Name = "_hexapodCoordSystemButton";
+            this._hexapodCoordSystemButton.Size = new System.Drawing.Size(70, 23);
+            this._hexapodCoordSystemButton.TabIndex = 4;
+            this._hexapodCoordSystemButton.Text = "좌표계";
+            this._hexapodCoordSystemButton.UseVisualStyleBackColor = true;
+            this._hexapodCoordSystemButton.Click += new System.EventHandler(this.HexapodCoordSystemButton_Click);
+            // 
+            // _hexapod3DButton
+            // 
+            this._hexapod3DButton.Location = new System.Drawing.Point(439, 9);
+            this._hexapod3DButton.Name = "_hexapod3DButton";
+            this._hexapod3DButton.Size = new System.Drawing.Size(70, 23);
+            this._hexapod3DButton.TabIndex = 5;
+            this._hexapod3DButton.Text = "3D 보기";
+            this._hexapod3DButton.UseVisualStyleBackColor = true;
+            this._hexapod3DButton.Click += new System.EventHandler(this.Hexapod3DButton_Click);
+            // 
+            // _hexapodSoftLimitButton
+            // 
+            this._hexapodSoftLimitButton.Location = new System.Drawing.Point(515, 9);
+            this._hexapodSoftLimitButton.Name = "_hexapodSoftLimitButton";
+            this._hexapodSoftLimitButton.Size = new System.Drawing.Size(80, 23);
+            this._hexapodSoftLimitButton.TabIndex = 6;
+            this._hexapodSoftLimitButton.Text = "소프트 리밋";
+            this._hexapodSoftLimitButton.UseVisualStyleBackColor = true;
+            this._hexapodSoftLimitButton.Click += new System.EventHandler(this.HexapodSoftLimitButton_Click);
             // 
             // _hexapodConnLabel
             // 
@@ -749,7 +750,7 @@
             this._xPosLabel.Font = new System.Drawing.Font("Consolas", 12F);
             this._xPosLabel.Location = new System.Drawing.Point(103, 10);
             this._xPosLabel.Name = "_xPosLabel";
-            this._xPosLabel.Size = new System.Drawing.Size(198, 62);
+            this._xPosLabel.Size = new System.Drawing.Size(138, 62);
             this._xPosLabel.TabIndex = 2;
             this._xPosLabel.Text = "0.000 µm";
             this._xPosLabel.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
@@ -757,7 +758,7 @@
             // _xPlusButton
             // 
             this._xPlusButton.Dock = System.Windows.Forms.DockStyle.Fill;
-            this._xPlusButton.Location = new System.Drawing.Point(307, 13);
+            this._xPlusButton.Location = new System.Drawing.Point(247, 13);
             this._xPlusButton.Name = "_xPlusButton";
             this._xPlusButton.Size = new System.Drawing.Size(44, 56);
             this._xPlusButton.TabIndex = 3;
@@ -768,7 +769,7 @@
             // 
             this._xStatusLabel.Dock = System.Windows.Forms.DockStyle.Fill;
             this._xStatusLabel.ForeColor = System.Drawing.Color.Gray;
-            this._xStatusLabel.Location = new System.Drawing.Point(357, 10);
+            this._xStatusLabel.Location = new System.Drawing.Point(297, 10);
             this._xStatusLabel.Name = "_xStatusLabel";
             this._xStatusLabel.Size = new System.Drawing.Size(84, 62);
             this._xStatusLabel.TabIndex = 4;
@@ -803,7 +804,7 @@
             this._yPosLabel.Font = new System.Drawing.Font("Consolas", 12F);
             this._yPosLabel.Location = new System.Drawing.Point(103, 72);
             this._yPosLabel.Name = "_yPosLabel";
-            this._yPosLabel.Size = new System.Drawing.Size(198, 62);
+            this._yPosLabel.Size = new System.Drawing.Size(138, 62);
             this._yPosLabel.TabIndex = 7;
             this._yPosLabel.Text = "0.000 µm";
             this._yPosLabel.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
@@ -811,7 +812,7 @@
             // _yPlusButton
             // 
             this._yPlusButton.Dock = System.Windows.Forms.DockStyle.Fill;
-            this._yPlusButton.Location = new System.Drawing.Point(307, 75);
+            this._yPlusButton.Location = new System.Drawing.Point(247, 75);
             this._yPlusButton.Name = "_yPlusButton";
             this._yPlusButton.Size = new System.Drawing.Size(44, 56);
             this._yPlusButton.TabIndex = 8;
@@ -822,7 +823,7 @@
             // 
             this._yStatusLabel.Dock = System.Windows.Forms.DockStyle.Fill;
             this._yStatusLabel.ForeColor = System.Drawing.Color.Gray;
-            this._yStatusLabel.Location = new System.Drawing.Point(357, 72);
+            this._yStatusLabel.Location = new System.Drawing.Point(297, 72);
             this._yStatusLabel.Name = "_yStatusLabel";
             this._yStatusLabel.Size = new System.Drawing.Size(84, 62);
             this._yStatusLabel.TabIndex = 9;
@@ -857,7 +858,7 @@
             this._zPosLabel.Font = new System.Drawing.Font("Consolas", 12F);
             this._zPosLabel.Location = new System.Drawing.Point(103, 134);
             this._zPosLabel.Name = "_zPosLabel";
-            this._zPosLabel.Size = new System.Drawing.Size(198, 62);
+            this._zPosLabel.Size = new System.Drawing.Size(138, 62);
             this._zPosLabel.TabIndex = 12;
             this._zPosLabel.Text = "0.000 µm";
             this._zPosLabel.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
@@ -865,7 +866,7 @@
             // _zPlusButton
             // 
             this._zPlusButton.Dock = System.Windows.Forms.DockStyle.Fill;
-            this._zPlusButton.Location = new System.Drawing.Point(307, 137);
+            this._zPlusButton.Location = new System.Drawing.Point(247, 137);
             this._zPlusButton.Name = "_zPlusButton";
             this._zPlusButton.Size = new System.Drawing.Size(44, 56);
             this._zPlusButton.TabIndex = 13;
@@ -876,7 +877,7 @@
             // 
             this._zStatusLabel.Dock = System.Windows.Forms.DockStyle.Fill;
             this._zStatusLabel.ForeColor = System.Drawing.Color.Gray;
-            this._zStatusLabel.Location = new System.Drawing.Point(357, 134);
+            this._zStatusLabel.Location = new System.Drawing.Point(297, 134);
             this._zStatusLabel.Name = "_zStatusLabel";
             this._zStatusLabel.Size = new System.Drawing.Size(84, 62);
             this._zStatusLabel.TabIndex = 14;
@@ -888,7 +889,7 @@
             this._xTargetInput.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right)));
             this._xTargetInput.DecimalPlaces = 3;
             this._xTargetInput.Font = new System.Drawing.Font("Consolas", 12F);
-            this._xTargetInput.Location = new System.Drawing.Point(447, 28);
+            this._xTargetInput.Location = new System.Drawing.Point(387, 28);
             this._xTargetInput.Maximum = new decimal(new int[] {
             1000000,
             0,
@@ -907,7 +908,7 @@
             // _xMoveButton
             // 
             this._xMoveButton.Dock = System.Windows.Forms.DockStyle.Fill;
-            this._xMoveButton.Location = new System.Drawing.Point(567, 13);
+            this._xMoveButton.Location = new System.Drawing.Point(507, 13);
             this._xMoveButton.Name = "_xMoveButton";
             this._xMoveButton.Size = new System.Drawing.Size(54, 56);
             this._xMoveButton.TabIndex = 16;
@@ -917,49 +918,19 @@
             // _xStopButton
             // 
             this._xStopButton.Dock = System.Windows.Forms.DockStyle.Fill;
-            this._xStopButton.Location = new System.Drawing.Point(627, 13);
+            this._xStopButton.Location = new System.Drawing.Point(567, 13);
             this._xStopButton.Name = "_xStopButton";
             this._xStopButton.Size = new System.Drawing.Size(54, 56);
             this._xStopButton.TabIndex = 17;
             this._xStopButton.Text = "정지";
             this._xStopButton.UseVisualStyleBackColor = true;
-            //
-            // _xHomeButton
-            //
-            this._xHomeButton.Dock = System.Windows.Forms.DockStyle.Fill;
-            this._xHomeButton.Location = new System.Drawing.Point(627, 13);
-            this._xHomeButton.Name = "_xHomeButton";
-            this._xHomeButton.Size = new System.Drawing.Size(54, 56);
-            this._xHomeButton.TabIndex = 18;
-            this._xHomeButton.Text = "원점";
-            this._xHomeButton.UseVisualStyleBackColor = true;
-            //
-            // _yHomeButton
-            //
-            this._yHomeButton.Dock = System.Windows.Forms.DockStyle.Fill;
-            this._yHomeButton.Location = new System.Drawing.Point(627, 75);
-            this._yHomeButton.Name = "_yHomeButton";
-            this._yHomeButton.Size = new System.Drawing.Size(54, 56);
-            this._yHomeButton.TabIndex = 18;
-            this._yHomeButton.Text = "원점";
-            this._yHomeButton.UseVisualStyleBackColor = true;
-            //
-            // _zHomeButton
-            //
-            this._zHomeButton.Dock = System.Windows.Forms.DockStyle.Fill;
-            this._zHomeButton.Location = new System.Drawing.Point(627, 137);
-            this._zHomeButton.Name = "_zHomeButton";
-            this._zHomeButton.Size = new System.Drawing.Size(54, 56);
-            this._zHomeButton.TabIndex = 18;
-            this._zHomeButton.Text = "원점";
-            this._zHomeButton.UseVisualStyleBackColor = true;
             // 
             // _yTargetInput
             // 
             this._yTargetInput.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right)));
             this._yTargetInput.DecimalPlaces = 3;
             this._yTargetInput.Font = new System.Drawing.Font("Consolas", 12F);
-            this._yTargetInput.Location = new System.Drawing.Point(447, 90);
+            this._yTargetInput.Location = new System.Drawing.Point(387, 90);
             this._yTargetInput.Maximum = new decimal(new int[] {
             1000000,
             0,
@@ -978,7 +949,7 @@
             // _yMoveButton
             // 
             this._yMoveButton.Dock = System.Windows.Forms.DockStyle.Fill;
-            this._yMoveButton.Location = new System.Drawing.Point(567, 75);
+            this._yMoveButton.Location = new System.Drawing.Point(507, 75);
             this._yMoveButton.Name = "_yMoveButton";
             this._yMoveButton.Size = new System.Drawing.Size(54, 56);
             this._yMoveButton.TabIndex = 18;
@@ -988,7 +959,7 @@
             // _yStopButton
             // 
             this._yStopButton.Dock = System.Windows.Forms.DockStyle.Fill;
-            this._yStopButton.Location = new System.Drawing.Point(627, 75);
+            this._yStopButton.Location = new System.Drawing.Point(567, 75);
             this._yStopButton.Name = "_yStopButton";
             this._yStopButton.Size = new System.Drawing.Size(54, 56);
             this._yStopButton.TabIndex = 19;
@@ -1000,7 +971,7 @@
             this._zTargetInput.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right)));
             this._zTargetInput.DecimalPlaces = 3;
             this._zTargetInput.Font = new System.Drawing.Font("Consolas", 12F);
-            this._zTargetInput.Location = new System.Drawing.Point(447, 152);
+            this._zTargetInput.Location = new System.Drawing.Point(387, 152);
             this._zTargetInput.Maximum = new decimal(new int[] {
             1000000,
             0,
@@ -1019,7 +990,7 @@
             // _zMoveButton
             // 
             this._zMoveButton.Dock = System.Windows.Forms.DockStyle.Fill;
-            this._zMoveButton.Location = new System.Drawing.Point(567, 137);
+            this._zMoveButton.Location = new System.Drawing.Point(507, 137);
             this._zMoveButton.Name = "_zMoveButton";
             this._zMoveButton.Size = new System.Drawing.Size(54, 56);
             this._zMoveButton.TabIndex = 20;
@@ -1029,12 +1000,42 @@
             // _zStopButton
             // 
             this._zStopButton.Dock = System.Windows.Forms.DockStyle.Fill;
-            this._zStopButton.Location = new System.Drawing.Point(627, 137);
+            this._zStopButton.Location = new System.Drawing.Point(567, 137);
             this._zStopButton.Name = "_zStopButton";
             this._zStopButton.Size = new System.Drawing.Size(54, 56);
             this._zStopButton.TabIndex = 21;
             this._zStopButton.Text = "정지";
             this._zStopButton.UseVisualStyleBackColor = true;
+            // 
+            // _xHomeButton
+            // 
+            this._xHomeButton.Dock = System.Windows.Forms.DockStyle.Fill;
+            this._xHomeButton.Location = new System.Drawing.Point(627, 13);
+            this._xHomeButton.Name = "_xHomeButton";
+            this._xHomeButton.Size = new System.Drawing.Size(54, 56);
+            this._xHomeButton.TabIndex = 18;
+            this._xHomeButton.Text = "원점";
+            this._xHomeButton.UseVisualStyleBackColor = true;
+            // 
+            // _yHomeButton
+            // 
+            this._yHomeButton.Dock = System.Windows.Forms.DockStyle.Fill;
+            this._yHomeButton.Location = new System.Drawing.Point(627, 75);
+            this._yHomeButton.Name = "_yHomeButton";
+            this._yHomeButton.Size = new System.Drawing.Size(54, 56);
+            this._yHomeButton.TabIndex = 18;
+            this._yHomeButton.Text = "원점";
+            this._yHomeButton.UseVisualStyleBackColor = true;
+            // 
+            // _zHomeButton
+            // 
+            this._zHomeButton.Dock = System.Windows.Forms.DockStyle.Fill;
+            this._zHomeButton.Location = new System.Drawing.Point(627, 137);
+            this._zHomeButton.Name = "_zHomeButton";
+            this._zHomeButton.Size = new System.Drawing.Size(54, 56);
+            this._zHomeButton.TabIndex = 18;
+            this._zHomeButton.Text = "원점";
+            this._zHomeButton.UseVisualStyleBackColor = true;
             // 
             // _stageHomeRow
             // 
@@ -1061,56 +1062,56 @@
             this._stageFindHomeButton.Text = "기계 원점 찾기";
             this._stageFindHomeButton.UseVisualStyleBackColor = true;
             this._stageFindHomeButton.Click += new System.EventHandler(this.StageFindHomeButton_Click);
-            //
+            // 
             // _stageHomeDirLabel
-            //
+            // 
             this._stageHomeDirLabel.AutoSize = true;
             this._stageHomeDirLabel.Location = new System.Drawing.Point(125, 6);
             this._stageHomeDirLabel.Name = "_stageHomeDirLabel";
             this._stageHomeDirLabel.Padding = new System.Windows.Forms.Padding(0, 6, 0, 0);
-            this._stageHomeDirLabel.Size = new System.Drawing.Size(58, 21);
+            this._stageHomeDirLabel.Size = new System.Drawing.Size(62, 21);
             this._stageHomeDirLabel.TabIndex = 4;
             this._stageHomeDirLabel.Text = "찾는 방향:";
-            //
+            // 
             // _stageHomeDirXCombo
-            //
+            // 
             this._stageHomeDirXCombo.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             this._stageHomeDirXCombo.Enabled = false;
             this._stageHomeDirXCombo.Items.AddRange(new object[] {
             "X (-)",
             "X (+)"});
-            this._stageHomeDirXCombo.Location = new System.Drawing.Point(189, 9);
+            this._stageHomeDirXCombo.Location = new System.Drawing.Point(193, 9);
             this._stageHomeDirXCombo.Name = "_stageHomeDirXCombo";
             this._stageHomeDirXCombo.Size = new System.Drawing.Size(58, 23);
             this._stageHomeDirXCombo.TabIndex = 5;
-            //
+            // 
             // _stageHomeDirYCombo
-            //
+            // 
             this._stageHomeDirYCombo.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             this._stageHomeDirYCombo.Enabled = false;
             this._stageHomeDirYCombo.Items.AddRange(new object[] {
             "Y (-)",
             "Y (+)"});
-            this._stageHomeDirYCombo.Location = new System.Drawing.Point(253, 9);
+            this._stageHomeDirYCombo.Location = new System.Drawing.Point(257, 9);
             this._stageHomeDirYCombo.Name = "_stageHomeDirYCombo";
             this._stageHomeDirYCombo.Size = new System.Drawing.Size(58, 23);
             this._stageHomeDirYCombo.TabIndex = 6;
-            //
+            // 
             // _stageHomeDirZCombo
-            //
+            // 
             this._stageHomeDirZCombo.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             this._stageHomeDirZCombo.Enabled = false;
             this._stageHomeDirZCombo.Items.AddRange(new object[] {
             "Z (-)",
             "Z (+)"});
-            this._stageHomeDirZCombo.Location = new System.Drawing.Point(317, 9);
+            this._stageHomeDirZCombo.Location = new System.Drawing.Point(321, 9);
             this._stageHomeDirZCombo.Name = "_stageHomeDirZCombo";
             this._stageHomeDirZCombo.Size = new System.Drawing.Size(58, 23);
             this._stageHomeDirZCombo.TabIndex = 7;
-            //
+            // 
             // _stageSaveOriginButton
-            //
-            this._stageSaveOriginButton.Location = new System.Drawing.Point(381, 9);
+            // 
+            this._stageSaveOriginButton.Location = new System.Drawing.Point(385, 9);
             this._stageSaveOriginButton.Name = "_stageSaveOriginButton";
             this._stageSaveOriginButton.Size = new System.Drawing.Size(150, 23);
             this._stageSaveOriginButton.TabIndex = 0;
@@ -1120,7 +1121,7 @@
             // 
             // _stageMoveHomeButton
             // 
-            this._stageMoveHomeButton.Location = new System.Drawing.Point(537, 9);
+            this._stageMoveHomeButton.Location = new System.Drawing.Point(541, 9);
             this._stageMoveHomeButton.Name = "_stageMoveHomeButton";
             this._stageMoveHomeButton.Size = new System.Drawing.Size(110, 23);
             this._stageMoveHomeButton.TabIndex = 1;
@@ -1180,9 +1181,9 @@
             this._stageDisconnectButton.Text = "해제";
             this._stageDisconnectButton.UseVisualStyleBackColor = true;
             this._stageDisconnectButton.Click += new System.EventHandler(this.StageDisconnectButton_Click);
-            //
+            // 
             // _stageDirectionButton
-            //
+            // 
             this._stageDirectionButton.Location = new System.Drawing.Point(317, 9);
             this._stageDirectionButton.Name = "_stageDirectionButton";
             this._stageDirectionButton.Size = new System.Drawing.Size(80, 23);
@@ -1190,9 +1191,9 @@
             this._stageDirectionButton.Text = "모터 방향";
             this._stageDirectionButton.UseVisualStyleBackColor = true;
             this._stageDirectionButton.Click += new System.EventHandler(this.StageDirectionButton_Click);
-            //
+            // 
             // _stageConnLabel
-            //
+            // 
             this._stageConnLabel.AutoSize = true;
             this._stageConnLabel.ForeColor = System.Drawing.Color.Red;
             this._stageConnLabel.Location = new System.Drawing.Point(403, 6);
@@ -1222,10 +1223,24 @@
             this._speedPanel.Size = new System.Drawing.Size(1384, 62);
             this._speedPanel.TabIndex = 1;
             // 
+            // _systemInitButton
+            // 
+            this._systemInitButton.BackColor = System.Drawing.Color.SteelBlue;
+            this._systemInitButton.Font = new System.Drawing.Font("맑은 고딕", 11F, System.Drawing.FontStyle.Bold);
+            this._systemInitButton.ForeColor = System.Drawing.Color.White;
+            this._systemInitButton.Location = new System.Drawing.Point(9, 9);
+            this._systemInitButton.Margin = new System.Windows.Forms.Padding(3, 3, 24, 3);
+            this._systemInitButton.Name = "_systemInitButton";
+            this._systemInitButton.Size = new System.Drawing.Size(220, 44);
+            this._systemInitButton.TabIndex = 8;
+            this._systemInitButton.Text = "▶ 전체 시스템 초기화";
+            this._systemInitButton.UseVisualStyleBackColor = false;
+            this._systemInitButton.Click += new System.EventHandler(this.SystemInitButton_Click);
+            // 
             // _speedLabel
             // 
             this._speedLabel.AutoSize = true;
-            this._speedLabel.Location = new System.Drawing.Point(259, 17);
+            this._speedLabel.Location = new System.Drawing.Point(256, 17);
             this._speedLabel.Margin = new System.Windows.Forms.Padding(3, 11, 3, 0);
             this._speedLabel.Name = "_speedLabel";
             this._speedLabel.Padding = new System.Windows.Forms.Padding(0, 6, 4, 0);
@@ -1240,7 +1255,7 @@
             "저속",
             "중속",
             "고속"});
-            this._speedCombo.Location = new System.Drawing.Point(303, 20);
+            this._speedCombo.Location = new System.Drawing.Point(300, 20);
             this._speedCombo.Margin = new System.Windows.Forms.Padding(3, 14, 3, 3);
             this._speedCombo.Name = "_speedCombo";
             this._speedCombo.Size = new System.Drawing.Size(100, 23);
@@ -1248,7 +1263,7 @@
             // 
             // _stopAllNormalButton
             // 
-            this._stopAllNormalButton.Location = new System.Drawing.Point(409, 20);
+            this._stopAllNormalButton.Location = new System.Drawing.Point(406, 20);
             this._stopAllNormalButton.Margin = new System.Windows.Forms.Padding(3, 14, 3, 3);
             this._stopAllNormalButton.Name = "_stopAllNormalButton";
             this._stopAllNormalButton.Size = new System.Drawing.Size(100, 23);
@@ -1261,7 +1276,7 @@
             // 
             this._stopAllButton.BackColor = System.Drawing.Color.IndianRed;
             this._stopAllButton.ForeColor = System.Drawing.Color.White;
-            this._stopAllButton.Location = new System.Drawing.Point(515, 20);
+            this._stopAllButton.Location = new System.Drawing.Point(512, 20);
             this._stopAllButton.Margin = new System.Windows.Forms.Padding(3, 14, 3, 3);
             this._stopAllButton.Name = "_stopAllButton";
             this._stopAllButton.Size = new System.Drawing.Size(130, 23);
@@ -1269,44 +1284,30 @@
             this._stopAllButton.Text = "전체 정지 (비상)";
             this._stopAllButton.UseVisualStyleBackColor = false;
             this._stopAllButton.Click += new System.EventHandler(this.StopAllButton_Click);
-            //
-            // _systemInitButton
-            //
-            this._systemInitButton.BackColor = System.Drawing.Color.SteelBlue;
-            this._systemInitButton.Font = new System.Drawing.Font("맑은 고딕", 11F, System.Drawing.FontStyle.Bold);
-            this._systemInitButton.ForeColor = System.Drawing.Color.White;
-            this._systemInitButton.Location = new System.Drawing.Point(9, 9);
-            this._systemInitButton.Margin = new System.Windows.Forms.Padding(3, 3, 24, 3);
-            this._systemInitButton.Name = "_systemInitButton";
-            this._systemInitButton.Size = new System.Drawing.Size(220, 44);
-            this._systemInitButton.TabIndex = 8;
-            this._systemInitButton.Text = "▶ 전체 시스템 초기화";
-            this._systemInitButton.UseVisualStyleBackColor = false;
-            this._systemInitButton.Click += new System.EventHandler(this.SystemInitButton_Click);
-            //
+            // 
             // _visionHostLabel
-            //
+            // 
             this._visionHostLabel.AutoSize = true;
-            this._visionHostLabel.Location = new System.Drawing.Point(681, 17);
+            this._visionHostLabel.Location = new System.Drawing.Point(678, 17);
             this._visionHostLabel.Margin = new System.Windows.Forms.Padding(33, 11, 3, 0);
             this._visionHostLabel.Name = "_visionHostLabel";
             this._visionHostLabel.Padding = new System.Windows.Forms.Padding(0, 6, 4, 0);
-            this._visionHostLabel.Size = new System.Drawing.Size(77, 21);
+            this._visionHostLabel.Size = new System.Drawing.Size(76, 21);
             this._visionHostLabel.TabIndex = 3;
             this._visionHostLabel.Text = "비전 IP:포트";
-            //
+            // 
             // _visionHostBox
-            //
-            this._visionHostBox.Location = new System.Drawing.Point(764, 20);
+            // 
+            this._visionHostBox.Location = new System.Drawing.Point(760, 20);
             this._visionHostBox.Margin = new System.Windows.Forms.Padding(3, 14, 3, 3);
             this._visionHostBox.Name = "_visionHostBox";
             this._visionHostBox.Size = new System.Drawing.Size(140, 23);
             this._visionHostBox.TabIndex = 4;
             this._visionHostBox.Text = "127.0.0.1:5000";
-            //
+            // 
             // _visionConnectButton
-            //
-            this._visionConnectButton.Location = new System.Drawing.Point(910, 20);
+            // 
+            this._visionConnectButton.Location = new System.Drawing.Point(906, 20);
             this._visionConnectButton.Margin = new System.Windows.Forms.Padding(3, 14, 3, 3);
             this._visionConnectButton.Name = "_visionConnectButton";
             this._visionConnectButton.Size = new System.Drawing.Size(60, 23);
@@ -1314,10 +1315,10 @@
             this._visionConnectButton.Text = "연결";
             this._visionConnectButton.UseVisualStyleBackColor = true;
             this._visionConnectButton.Click += new System.EventHandler(this.VisionConnectButton_Click);
-            //
+            // 
             // _visionDisconnectButton
-            //
-            this._visionDisconnectButton.Location = new System.Drawing.Point(976, 20);
+            // 
+            this._visionDisconnectButton.Location = new System.Drawing.Point(972, 20);
             this._visionDisconnectButton.Margin = new System.Windows.Forms.Padding(3, 14, 3, 3);
             this._visionDisconnectButton.Name = "_visionDisconnectButton";
             this._visionDisconnectButton.Size = new System.Drawing.Size(60, 23);
@@ -1325,10 +1326,10 @@
             this._visionDisconnectButton.Text = "해제";
             this._visionDisconnectButton.UseVisualStyleBackColor = true;
             this._visionDisconnectButton.Click += new System.EventHandler(this.VisionDisconnectButton_Click);
-            //
+            // 
             // _visionCorrectButton
-            //
-            this._visionCorrectButton.Location = new System.Drawing.Point(1042, 20);
+            // 
+            this._visionCorrectButton.Location = new System.Drawing.Point(1038, 20);
             this._visionCorrectButton.Margin = new System.Windows.Forms.Padding(3, 14, 3, 3);
             this._visionCorrectButton.Name = "_visionCorrectButton";
             this._visionCorrectButton.Size = new System.Drawing.Size(100, 23);
@@ -1336,27 +1337,44 @@
             this._visionCorrectButton.Text = "비전 보정";
             this._visionCorrectButton.UseVisualStyleBackColor = true;
             this._visionCorrectButton.Click += new System.EventHandler(this.VisionCorrectButton_Click);
-            //
+            // 
             // _visionConnLabel
-            //
+            // 
             this._visionConnLabel.AutoSize = true;
             this._visionConnLabel.ForeColor = System.Drawing.Color.Red;
-            this._visionConnLabel.Location = new System.Drawing.Point(1148, 17);
+            this._visionConnLabel.Location = new System.Drawing.Point(1144, 17);
             this._visionConnLabel.Margin = new System.Windows.Forms.Padding(3, 11, 3, 0);
             this._visionConnLabel.Name = "_visionConnLabel";
             this._visionConnLabel.Padding = new System.Windows.Forms.Padding(8, 6, 0, 0);
             this._visionConnLabel.Size = new System.Drawing.Size(67, 21);
             this._visionConnLabel.TabIndex = 8;
             this._visionConnLabel.Text = "연결 안됨";
+            //
+            // _systemInitBanner
+            //
+            this._systemInitBanner.BackColor = System.Drawing.Color.DarkOrange;
+            this._systemInitBanner.Cursor = System.Windows.Forms.Cursors.Hand;
+            this._systemInitBanner.Dock = System.Windows.Forms.DockStyle.Top;
+            this._systemInitBanner.Font = new System.Drawing.Font("맑은 고딕", 13F, System.Drawing.FontStyle.Bold);
+            this._systemInitBanner.ForeColor = System.Drawing.Color.White;
+            this._systemInitBanner.Location = new System.Drawing.Point(0, 362);
+            this._systemInitBanner.Name = "_systemInitBanner";
+            this._systemInitBanner.Padding = new System.Windows.Forms.Padding(12, 0, 12, 0);
+            this._systemInitBanner.Size = new System.Drawing.Size(1384, 48);
+            this._systemInitBanner.TabIndex = 4;
+            this._systemInitBanner.Text = "전체 시스템 초기화 상태";
+            this._systemInitBanner.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
+            this._systemInitBanner.Visible = false;
+            this._systemInitBanner.Click += new System.EventHandler(this.SystemInitBanner_Click);
             // 
             // _probeGroup
             // 
             this._probeGroup.Controls.Add(this._probeGrid);
             this._probeGroup.Controls.Add(this._probeBtnRow);
             this._probeGroup.Dock = System.Windows.Forms.DockStyle.Fill;
-            this._probeGroup.Location = new System.Drawing.Point(0, 336);
+            this._probeGroup.Location = new System.Drawing.Point(0, 362);
             this._probeGroup.Name = "_probeGroup";
-            this._probeGroup.Size = new System.Drawing.Size(1384, 315);
+            this._probeGroup.Size = new System.Drawing.Size(1384, 289);
             this._probeGroup.TabIndex = 2;
             this._probeGroup.TabStop = false;
             this._probeGroup.Text = "프로브 (Solartron Orbit3 - DP10/DP20)";
@@ -1380,7 +1398,7 @@
             this._probeGrid.Name = "_probeGrid";
             this._probeGrid.RowHeadersVisible = false;
             this._probeGrid.SelectionMode = System.Windows.Forms.DataGridViewSelectionMode.FullRowSelect;
-            this._probeGrid.Size = new System.Drawing.Size(1378, 257);
+            this._probeGrid.Size = new System.Drawing.Size(1378, 231);
             this._probeGrid.TabIndex = 1;
             this._probeGrid.CellClick += new System.Windows.Forms.DataGridViewCellEventHandler(this.ProbeGrid_CellClick);
             this._probeGrid.CellEndEdit += new System.Windows.Forms.DataGridViewCellEventHandler(this.ProbeGrid_CellEndEdit);
@@ -1401,9 +1419,9 @@
             this._colReading.HeaderText = "측정값 (µm)";
             this._colReading.Name = "_colReading";
             this._colReading.ReadOnly = true;
-            //
+            // 
             // _colCorrected
-            //
+            // 
             this._colCorrected.HeaderText = "보정값 (µm)";
             this._colCorrected.Name = "_colCorrected";
             this._colCorrected.ReadOnly = true;
@@ -1533,17 +1551,17 @@
             // 
             this._probeTimer.Interval = 300;
             this._probeTimer.Tick += new System.EventHandler(this.ProbeTimer_Tick);
-            //
+            // 
             // _statusTimer
-            //
-            this._statusTimer.Interval = 100;
+            // 
             this._statusTimer.Tick += new System.EventHandler(this.StatusTimer_Tick);
-            //
+            // 
             // F_Main
             // 
             this.ClientSize = new System.Drawing.Size(1384, 781);
             this.Controls.Add(this._probeGroup);
             this.Controls.Add(this._logBox);
+            this.Controls.Add(this._systemInitBanner);
             this.Controls.Add(this._speedPanel);
             this.Controls.Add(this._topPanel);
             this.Font = new System.Drawing.Font("맑은 고딕", 9F);
@@ -1558,7 +1576,6 @@
             ((System.ComponentModel.ISupportInitialize)(this._tyTargetInput)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this._tzTargetInput)).EndInit();
             this._hexapodHomeRow.ResumeLayout(false);
-            this._hexapodHomeRow.PerformLayout();
             this._hexapodConnRow.ResumeLayout(false);
             this._hexapodConnRow.PerformLayout();
             this._stageGroup.ResumeLayout(false);
@@ -1567,6 +1584,7 @@
             ((System.ComponentModel.ISupportInitialize)(this._yTargetInput)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this._zTargetInput)).EndInit();
             this._stageHomeRow.ResumeLayout(false);
+            this._stageHomeRow.PerformLayout();
             this._stageConnRow.ResumeLayout(false);
             this._stageConnRow.PerformLayout();
             this._speedPanel.ResumeLayout(false);
@@ -1642,6 +1660,7 @@
         private System.Windows.Forms.Button _visionDisconnectButton;
         private System.Windows.Forms.Button _visionCorrectButton;
         private System.Windows.Forms.Label _visionConnLabel;
+        private System.Windows.Forms.Label _systemInitBanner;
         private System.Windows.Forms.GroupBox _probeGroup;
         private System.Windows.Forms.FlowLayoutPanel _probeBtnRow;
         private System.Windows.Forms.Button _probeConnectButton;
