@@ -92,6 +92,8 @@ namespace ValidationStage.Devices
         /// <summary>
         /// 헥사포드 컨트롤러에 TCP/IP 로 연결한다 (포트 <see cref="Port"/>). TX, TY, TZ 상태 갱신을 시작한다.
         /// 연결 후에는 컨트롤러에 남아 있던 속도 그대로이므로, 필요하면 <see cref="SetSpeedLevel"/> 로 속도를 맞춘다.
+        /// 연결 직후 좌표계 CSHCS(ZERO 하위, U=180) / TILTEDCS(CSHCS 하위, 값 0) 가 없으면 만들고 TILTEDCS 를 활성화한다
+        /// (이미 있는 좌표계는 그대로 둠, 플랫폼은 움직이지 않음). 이 준비가 실패해도 연결은 성공이며 로그에 경고가 남는다.
         /// </summary>
         /// <param name="host">컨트롤러 IP (예: "169.254.3.106")</param>
         public bool Connect(string host)
@@ -121,12 +123,77 @@ namespace ValidationStage.Devices
                 Task.Run(() => PollingStatus(token));
                 UpdateSpeedStatus();
                 _log.Add(T("연결됨", "Connected"));
+                EnsureTiltedCoordSystem();
                 return true;
             }
             catch (Exception ex)
             {
                 _errors.Fail(T($"연결 오류: {ex.Message}", $"Connect error: {ex.Message}"), (ex as DeviceException)?.Code ?? 0);
                 return false;
+            }
+        }
+
+        // 작업 좌표계 체인 ZERO -> CSHCS(U=180) -> TILTEDCS (A 프로젝트 PI_Motion 과 같은 구성)
+        private const string TiltedCSName = "TILTEDCS";
+        private const string ParentCSName = "CSHCS";
+        private static readonly double[] ParentCSValues = { 0, 0, 0, 180, 0, 0 };   // X,Y,Z mm / U,V,W deg
+
+        /// <summary>
+        /// 연결 직후: CSHCS / TILTEDCS 가 없으면 만들고 (TILTEDCS 는 0 으로 정의해 CSHCS 하위에 연결), TILTEDCS 를 활성화한다.
+        /// 이미 있는 좌표계는 값/연결을 건드리지 않는다. 실패해도 연결은 성공으로 두고 로그만 남긴다 (LastError 는 바꾸지 않음).
+        /// 활성화(KEN)는 플랫폼을 움직이지 않는다.
+        /// </summary>
+        private void EnsureTiltedCoordSystem()
+        {
+            try
+            {
+                var buffer = new StringBuilder(65536);
+                if (PI_GCS2.qKLS(_deviceId, null, null, null, buffer, buffer.Capacity) == PI_RESULT_FAILURE)
+                {
+                    throw GcsFail(T("좌표계 목록 조회(KLS?) 실패", "Coordinate system list (KLS?) failed"));
+                }
+                Dictionary<string, string> parents = XElement.Parse(buffer.ToString().Trim()).Elements()
+                    .ToDictionary(e => (string)e.Attribute("Name") ?? e.Name.LocalName, e => (string)e.Attribute("Parent"));
+
+                if (!parents.ContainsKey(ParentCSName))
+                {
+                    if (PI_GCS2.KSD(_deviceId, ParentCSName, AllAxes, ParentCSValues) == PI_RESULT_FAILURE)
+                    {
+                        throw GcsFail(T($"좌표계 {ParentCSName} 생성(KSD) 실패", $"Create coordinate system {ParentCSName} (KSD) failed"));
+                    }
+                    _log.Add(T($"좌표계 {ParentCSName} 생성 (U=180)", $"Coordinate system {ParentCSName} created (U=180)"));
+                }
+
+                if (!parents.ContainsKey(TiltedCSName))
+                {
+                    if (PI_GCS2.KSD(_deviceId, TiltedCSName, AllAxes, new double[6]) == PI_RESULT_FAILURE)
+                    {
+                        throw GcsFail(T($"좌표계 {TiltedCSName} 생성(KSD) 실패", $"Create coordinate system {TiltedCSName} (KSD) failed"));
+                    }
+                    if (PI_GCS2.KLN(_deviceId, TiltedCSName, ParentCSName) == PI_RESULT_FAILURE)
+                    {
+                        throw GcsFail(T($"좌표계 연결(KLN {TiltedCSName} → {ParentCSName}) 실패", $"Link coordinate system (KLN {TiltedCSName} → {ParentCSName}) failed"));
+                    }
+                    _log.Add(T($"좌표계 {TiltedCSName} 생성 ({ParentCSName} 하위, 값 0)", $"Coordinate system {TiltedCSName} created (under {ParentCSName}, all 0)"));
+                }
+                else if (parents[TiltedCSName] != ParentCSName)
+                {
+                    _log.Add(T($"경고: 기존 좌표계 {TiltedCSName} 의 부모가 {parents[TiltedCSName]} 입니다 ({ParentCSName} 아님) - 그대로 둡니다",
+                        $"Warning: existing coordinate system {TiltedCSName} has parent {parents[TiltedCSName]} (not {ParentCSName}) - left as is"));
+                }
+
+                if (GetActiveUserCoordSystem() != TiltedCSName)
+                {
+                    if (PI_GCS2.KEN(_deviceId, TiltedCSName) == PI_RESULT_FAILURE)
+                    {
+                        throw GcsFail(T($"좌표계 {TiltedCSName} 활성화(KEN) 실패", $"Activate coordinate system {TiltedCSName} (KEN) failed"));
+                    }
+                    _log.Add(T($"좌표계 {TiltedCSName} 활성화", $"Coordinate system {TiltedCSName} activated"));
+                }
+            }
+            catch (Exception ex)
+            {
+                _log.Add(T($"경고: 좌표계 {TiltedCSName} 준비 실패 - {ex.Message}", $"Warning: coordinate system {TiltedCSName} setup failed - {ex.Message}"));
             }
         }
 

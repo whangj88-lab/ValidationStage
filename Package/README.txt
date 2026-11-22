@@ -86,6 +86,8 @@ system.DisconnectAll();
   ReadAll 이 Busy 를 돌려주면 다른 작업이 버스를 쓰는 중이므로 그 주기만 건너뜁니다.
 - Hexapod 컨트롤러 전원을 켠 뒤에는 레퍼런스(Hexapod.ReferenceAsync)를 먼저 해야 움직입니다.
   (안 하면 LastError.Code = 5 "unreferenced")
+- Hexapod 연결(ConnectHexapod) 직후 좌표계 CSHCS(ZERO 하위, U=180) 와 TILTEDCS(CSHCS 하위, 값 0) 가 없으면 만들고
+  TILTEDCS 를 활성화합니다. 이미 있는 좌표계는 그대로 둡니다. 플랫폼은 움직이지 않습니다.
 - Hexapod TX, TY, TZ 에는 DLL 소프트웨어 리밋이 있습니다 (단위 arcmin, 좌표계별, 저장한 적 없는 좌표계는 사용 + ±300 arcmin).
   이동(MoveAsync/MoveAbsAsync)은 목표가 활성 좌표계의 리밋을 벗어나면 명령 전체를 보내지 않고 false 를 돌려주며,
   조그(JogRun)는 리밋에서 멈춥니다. 읽기 Hexapod.GetSoftLimit("TILTEDCS"), 설정+저장(HexapodHost.txt)

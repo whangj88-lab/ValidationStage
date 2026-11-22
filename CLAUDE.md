@@ -252,6 +252,14 @@ Scope: **list + create + activate + delete** — Save/Reset is present but disab
   Refused while moving. Rendered against the real hexapod (read-only) and screenshot-checked; create/activate not
   yet run on hardware. Defined CSs may not survive a controller power cycle unless saved (Save/Reset not implemented).
 
+**Coordinate-system chain on connect (2026-11-23, user request, ported from A's newer `PI_Motion`):** at the end of
+`Hexapod.Connect`, private `EnsureTiltedCoordSystem()`: `KLS?` → if `CSHCS` is missing, `KSD CSHCS 0 0 0 180 0 0`
+(under ZERO); if `TILTEDCS` is missing, `KSD TILTEDCS` all 0 + `KLN TILTEDCS CSHCS`; then `KEN TILTEDCS` unless it's
+already the active user CS. **Existing CSs are left untouched** (user: "있으면 그대로") — unlike A, which redefines
+CSHCS if its values differ and re-`KSD`s TILTEDCS from a file every connect; an existing TILTEDCS with another parent
+only gets a log warning. Failure only logs a warning (connect still succeeds, `LastError` untouched). The public
+`SetCoordinateSystem` (A's old TILTEDCS-only version) is unchanged and not called anywhere. Not yet run on hardware.
+
 **Hexapod 3D view, added 2026-10-02, moved into the DLL 2026-10-07:** [3D 보기] in the hexapod connection row (after
 [좌표계]) opens the non-modal **`ValidationStage.Devices.Hexapod3DForm`** (public, `new Hexapod3DForm(hexapod).Show()`;
 F_Main keeps a single instance in `_hexapod3DForm`), a look-alike of PIMikroMove's 3D hexapod view (user's
@@ -515,6 +523,13 @@ window rect on a 1400×820 black canvas at x+7, area boxes A–E: 3px border + 4
 image2/3/9/10 = capture + 15px white margin, 2px red (220,30,30) boxes with numbered badges on the top-left corner). Stage
 and hexapod tables were renumbered ①–⑮; sections 6 (모터 방향 창, image9) and 7 (소프트 리밋 창, image10) were added with
 TOC lines, and `settings.xml` got `updateFields` so Word refreshes the TOC page numbers on open. The harness was not kept.
+2026-11-23 patch (전체 시스템 초기화, 측정 원점 저장, 보정값 column, 18 bit, locked direction combos): image1/2/4/5/9 re-shot
+the same way (same styles); 3.1/3.3/3.4/6 tables rebuilt (3.3 now ①–⑧, 3.4 ①–⑭); new notes: red "방향 설정 변경 금지
+(프로브 및 하드웨어 손상 위험)" in section 2 (user asked that the docs state changing motor/home direction can damage the
+probe and hardware), red note after the 3.1 table, blue "[전체 시스템 초기화] 동작"/"측정 원점 저장" + red 주의 in 3.3, blue
+"해상도" in 3.4; section 6 주의 rewritten. Section 3 heading now uses `pageBreakBefore` instead of a page-break paragraph
+(section 2 grew, which left a blank page). Rendered via Word COM → PDF to check. The tilt-correction XML is deliberately
+not mentioned (coefficients aren't exposed to the vendor).
 
 ## Status / what's not yet verified
 
