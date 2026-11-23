@@ -206,6 +206,18 @@ Requirement 5 (split axes across two controllers) is fixed in the classes: `Moto
 `Hexapod.Axes = {TX,TY,TZ}`; each rejects other axes. The hexapod's own X/Y/Z can't be moved through the DLL (user
 choice 2026-10-06) — only read (`GetAllPositions`, `GetRawPose`).
 
+**Pivot (2026-11-23, user):** PI's `SPI` can't be used - measured on hardware: `SPI?` -> GCS error 544 "With this coordinate system type SPI usage
+is not supported" (TILTEDCS is KSD; only ZERO has an SPI item in KLS?). So `Hexapod.SetPivot(x,y,z)` (mm, axes of TILTEDCS's parent CSHCS) moves the
+**origin of TILTEDCS** (= rotation centre of a KSD): `KEN ZERO` -> `KSD TILTEDCS` (new XYZ, old UVW) -> `KLN` to its old parent if the KSD dropped it ->
+`KEN TILTEDCS`, verify with KLS?; on failure the old pose is restored. Refused unless not moving, referenced, TILTEDCS (KSD) active and |TX,TY,TZ| <=
+0.05 arcmin (a tilted change would leave the hidden X/Y/Z non-zero, and "move to zero" only moves TX/TY/TZ). `_motionLock` keeps
+MoveAsync/JogRun/FRF out while ZERO is briefly active (ZERO has TY/TZ reversed). Bumps `ReferenceVersion`. `GetPivot()` = TILTEDCS POS X/Y/Z read from the
+controller (null if TILTEDCS isn't active). Stays in the controller across reconnects (power cycle unknown). Verified against a fake GCS server on
+127.0.0.1:50000 (real PI DLL) and **on hardware (2026-11-23 16:38)**: pivot Z +10 mm, TX 10 arcmin -> TZ1/TZ2 probes changed by +28.88/+28.75 um
+(29.09 expected; the TX probe angle is also 99 % of the commanded one), SetPivot itself moved the probes <= 0.1 um, parent/pose/restore OK. The Y probe doesn't
+see it (X/Y probes follow the stage, TZ1/TZ2 the hexapod along Y). TILTEDCS +Z moves the centre away from the TZ probes: lever 13.7 mm at pivot 0,
+23.6 at +10. Pivot X/Y and TY/TZ rotation not checked. Don't offer `SetCoordinateSystem` as the pivot method: it re-`KSD`s TILTEDCS without `KLN` to CSHCS.
+
 **Unit convention (confirmed by reading the conversion code, not assumed):** the public API on both devices uses
 **µm for X/Y/Z** and **arcmin (arc-minutes) for TX/TY/TZ**. Internally `Hexapod` converts arcmin→deg (÷ −60) before
 calling into GCS2. Don't relabel these without re-checking `MoveAsync`'s conversion lines.
@@ -409,7 +421,7 @@ in software rather than wired 1:1 to COM ports. `Probe` therefore:
   (internal `ZeroedReading` remains as correction input); the only value is `CorrectedReading`. Single-module read
   (`Probe.Read`, `ModuleNotFound`, per-row [읽기] button, added 2026-10-01) was **removed** too — correction needs all 7.
   Grid: one "측정값 (µm)" column = `CorrectedReading`; when null without an error → "-" + state "보정 불가 (7개 프로브 필요)".
-  Deriving tilt coefficients needs uncorrected data, which this DLL no longer gives (A's program does that).
+  (Uncorrected data is only written to the tilt-measurement csv, see below.)
 - **Resolution → 18 bit on connect (2026-11-19, user request):** `ConnectAsync` → `SetResolution18Bit()`: every
   `OrbitModuleDP` with `isResolutionAvailable(res18Bit)` and `Resolution != res18Bit` is set to 18 bit (logged per
   module; a failure only logs, connect still succeeds). **Also applied after `ScanAsync` (Ping) and a successful
@@ -428,6 +440,35 @@ in software rather than wired 1:1 to COM ports. `Probe` therefore:
   with all 0 (= no correction, user choice) if missing; NaN/Inf or unreadable → 0 + log. Loaded once in the `Probe`
   constructor (restart to reload). The 45000/83000/60000/120000/−670 constants are A's geometry — B's probe layout is
   the same (user, 2026-11-20).
+- **Tilt-correction sign fix (2026-11-23, user approved):** coefficients come from A's signed data (X +1, rest −1), so using
+  them with all-+ readings corrected the wrong way (XtoTX/TY1/TY2, XtoY, YtoX) and the TZ-rotation/glass terms were off.
+  `ProbeTiltCorrection.Apply` now multiplies by `Signs` internally and un-multiplies the output, so API values stay all + and
+  coefficient files stay interchangeable with A. Verified on A's 2026-11-20 csv files (C:\CSHTest\Result\Glass\261120): equals A's
+  compensated csv within 0.00015 µm (A's csv is before `ldComp`).
+- **Automatic tilt measurement (2026-11-23, user request; API stays public but is deliberately not
+  described in `Package/README.txt`, the manual or the API xml - user decision, don't re-add; its code uses `//` instead of `///` and
+  `[EditorBrowsable(Never)]`, incl. the internal `ProbeTiltCorrection`):** `ValidationSystem.MeasureProbeTiltAsync`
+  (`ValidationSystem.ProbeTilt.cs`) → `ProbeTiltMeasurement` (scan order + math; hardware via delegates, so it can be
+  simulated). Only when `IsSystemInitialized` (init reached probe zero and no device's `ReferenceVersion` changed since:
+  connect/disconnect, stage home/p0, hexapod FRF/coord-system commands, probe zero/scan/notify; jog/move OK). Low speed, hexapod
+  + stage → 0, then all X scans, then all Y scans, −1600→+1600 step 100 (backlash start −1750), 0.5 s settle, 5-sample mean: per axis 1 warm-up
+  + 3 measure (mean of LSQ slopes vs the moving axis's *probe*, signed) + 1 verify. Aborts on
+  limit bit, target miss > 1 µm, read failure, moved probe not following the stage within 10 %, stop commands (stays where it
+  stopped). Verdict from the verify scan's residual slope: ≤0.0001 Good, ≤0.0002 Caution, else Bad (from A's data). Files:
+  `DoNotTouch\ProbeTilt\ProbeTiltCorrection_yyMMdd_HHmmss.xml` + `_Raw.csv` + `_Result.csv`; never applied automatically —
+  `ApplyProbeTilt` backs up and replaces `ProbeTiltCorrection.xml`, live without restart. Sample: [기울기 보정 측정] (probe row, **hidden;
+  Ctrl+Shift+F12 toggles it** - `F_Main.ProcessCmdKey`, user 2026-11-23: developer only) →
+  confirm, reuses the init banner/UI lock → `F_ProbeTiltResult` (own designer file) with [적용]. A scan can't separate stage
+  straightness from glass tilt, and doesn't check the TZ-rotation terms. Checked by simulation, A's data and on hardware (below).
+  **First hardware run (2026-11-23, not applied)** alternated X/Y scans: XtoY came out −0.0020 (warm-up before Y ever moved: −0.0008),
+  YtoX −0.0014. Cause: returning to 0 from + leaves X ≈ +18, Y ≈ −30 µm (probe) off = backlash, and a just-moved resting axis creeps
+  during the other axis's scan (Y ≈ 7 µm); verify scans had the same order so didn't catch it (A's csv shows the same: first X run
+  after Y runs −0.0012, then −0.00075). Fix: X and Y grouped, `ParkAsync` = approach 0 from −150 at start/after X/at the end,
+  `Warnings` if the resting axis's probe is > 10 µm off zero (verdict ≥ Caution), Time(s) column in the raw csv.
+  **Second run (2026-11-23 15:12, not applied):** all Good, no warning, XtoY -0.00079, YtoX -0.00100 (as in A's data). Old coefficients also
+  stay within 0.32 um/3200 on it, so replacing isn't needed. Slow drift over the ~4 min of each axis (XtoY -0.00072 -> -0.00085, 0.3-0.4 um/3200;
+  cause unknown). Sign proven: A's current formula (`CSH030 4Line_Calibration`) + new xml reduces all 8, negated coefficients double them.
+  [원점으로 이동] and system init still approach 0 from whatever side (15–30 µm difference) — raised with the user, not changed.
 - Zero/tare is a **software offset** (`Zero`/`ZeroAll`, stored per module ID), not a hardware preset. `OrbitModule`
   does expose `PresetInUnits` for a hardware zero if that's ever needed instead.
 
@@ -534,6 +575,10 @@ D probe, E log, plus the coordinate-system and 3D windows). The user decided the
 coordinate-system window **are** part of what the vendor gets. Generated without Word (none on this PC): a C# raw
 WordprocessingML writer compiled with VS's Roslyn `csc`; screenshots taken by driving the app through UI Automation
 (connect buttons only). The generator was not kept in the repo — if the UI changes, the docs must be redone.
+**The company logo in the page header (added by the user 2026-11-23) must stay in every future version** (user): first-page
+`header2.xml` (`titlePg`) and default `header1.xml`, both `media/image1.png`, 991235x367665 EMU, right-aligned. So the screenshots are now
+`image2`-`image11` (older notes below count from image1 = main screen); resolve images through `document.xml.rels`, don't assume names.
+The file is now saved by WPS.
 Since the user edits the manual by hand, later UI changes are patched in place (2026-10-27, stage home-direction
 combos): only the affected images (`word/media/image1.png` main screen, `image2.png` stage callouts) and table rows in
 `word/document.xml` were replaced inside the zip — new pixels pasted from a fresh unconnected screenshot (area A tint
@@ -551,6 +596,12 @@ probe and hardware), red note after the 3.1 table, blue "[전체 시스템 초�
 "해상도" in 3.4; section 6 주의 rewritten. Section 3 heading now uses `pageBreakBefore` instead of a page-break paragraph
 (section 2 grew, which left a blank page). Rendered via Word COM → PDF to check. The tilt-correction XML is deliberately
 not mentioned (coefficients aren't exposed to the vendor).
+2026-11-23 patch 2 (user approved the draft first): new last chapter **"8. 주요 메서드"** (8.1-8.8: method / function / arguments / return tables + example code,
+compiled against the DLL; no tilt measurement, no probe label setter, no direction setters - user decisions), 3.4 probe table ①–⑫ (single corrected value, no
+[읽기]), chapter 6 (file value vs controller value, "설정 불일치" callout, image shrunk to 3100000 EMU wide), chapter 7 starts with `pageBreakBefore`. Images
+re-shot/patched: image2, image3 (home direction combos now - / + / +), image6, image10. Word/WPS COM isn't usable on this PC (80040154), so it was checked
+with a throwaway WPF layout program only. The user then edited chapter 8 (wording "반환", page breaks) and refreshed the TOC in WPS (23 pages);
+build on the current file, don't regenerate chapter 8.
 
 ## Status / what's not yet verified
 

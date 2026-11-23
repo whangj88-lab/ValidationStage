@@ -93,6 +93,9 @@ system.DisconnectAll();
   조그(JogRun)는 리밋에서 멈춥니다. 읽기 Hexapod.GetSoftLimit("TILTEDCS"), 설정+저장(HexapodHost.txt)
   system.SetHexapodSoftLimit("TILTEDCS", new HexapodSoftLimit { Min = new[] { -100.0, -100, -100 }, Max = new[] { 100.0, 100, 100 } }).
   DLL 을 거치지 않는 이동(PIMikroMove 등)과 레퍼런스(FRF)는 검사하지 않습니다.
+- Hexapod 회전 중심(피벗)은 Hexapod.SetPivot(x, y, z) 로 설정하고 Hexapod.GetPivot() 으로 읽습니다 (mm, TILTEDCS 축 기준, 플랫폼은 움직이지 않음).
+  레퍼런스 완료, 정지, TX = TY = TZ = 0, TILTEDCS 활성일 때만 되며 아니면 false 입니다. 다시 바꿀 때까지 컨트롤러에 남습니다.
+  바꾼 뒤에는 전체 시스템 초기화를 다시 하십시오.
 - Motorized Stage 는 컨트롤러 전원을 켜면 위치가 0 부터 시작합니다. 필요하면 HomeStageAsync(기계 원점 찾기)를 먼저 하십시오.
   찾는 방향은 축별로 지정합니다 (기본 (-)리밋 방향). 예: HomeStageAsync(HomeDirection.Negative, HomeDirection.Negative, HomeDirection.Positive)
   한 축만 찾을 때는 HomeStageAxisAsync(Axis.Z, HomeDirection.Positive)
@@ -124,7 +127,8 @@ system.DisconnectAll();
 - 프로브 측정값은 ReadAll 결과의 ProbeChannel.CorrectedReading (µm, 영점 + 기울기 보정 적용) 입니다.
   라벨이 X, Y, TZ1, TZ2, TX, TY1, TY2 인 모듈 7개가 모두 있어야 하며, 하나라도 없거나 중복/오류면 모두 null 입니다.
   보정 전 값과 모듈 하나만 읽는 기능은 제공하지 않습니다.
-  부호는 뒤집지 않습니다 (모두 +). 반대 방향이 필요하면 가져가서 부호를 바꿔 쓰십시오.
+  측정값의 부호는 뒤집지 않습니다 (모두 +). 반대 방향이 필요하면 가져가서 부호를 바꿔 쓰십시오.
+  (보정 계수는 X 는 +, 나머지 프로브는 - 부호 기준의 값이며 DLL 안에서 맞춰 계산합니다)
   보정 계수는 C:\ValidationStage\DoNotTouch\ProbeTiltCorrection.xml 에서 읽습니다 (없으면 모두 0 = 보정 없음으로 만들어짐).
 - 오류/로그 메시지 언어: Messages.Language = Language.Korean / Language.English
 

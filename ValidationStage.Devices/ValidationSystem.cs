@@ -14,7 +14,7 @@ namespace ValidationStage.Devices
     /// 장비 전용 기능(좌표계, 프로브 스캔/읽기 등)은 <see cref="Stage"/>, <see cref="Hexapod"/>, <see cref="Probe"/> 를 직접 호출한다.
     /// 연결 주소는 <see cref="SettingsDirectory"/> 의 StageHost.txt, HexapodHost.txt 에 저장된다 (StageHost.txt 에는 스테이지 원점 찾는 방향/모터 방향, HexapodHost.txt 에는 헥사포드 소프트웨어 리밋도 함께 저장).
     /// </summary>
-    public class ValidationSystem
+    public partial class ValidationSystem
     {
         /// <summary>장비 객체를 만들고 <see cref="SettingsDirectory"/> 의 설정 파일(StageHost.txt, HexapodHost.txt)을 읽는다. 장비 연결은 하지 않는다.</summary>
         public ValidationSystem()
@@ -223,6 +223,7 @@ namespace ValidationStage.Devices
         /// <summary>한 축만 감속 정지. 스테이지: MMT "S". 헥사포드: HLT (비상 정지 STP 와 다름).</summary>
         public async Task<bool> StopAxisAsync(Axis axis)
         {
+            RequestTiltStop();
             if (IsStageAxis(axis))
             {
                 return Track(await Stage.StopAsync(new[] { axis }), Stage.LastError);
@@ -294,11 +295,19 @@ namespace ValidationStage.Devices
         public async Task<bool> HomeAndZeroProbesAsync(HomeDirection x = HomeDirection.Negative,
             HomeDirection y = HomeDirection.Negative, HomeDirection z = HomeDirection.Negative)
         {
-            if (_systemInitRunning)
+            lock (_sequenceLock)
             {
-                return Fail(T("전체 시스템 초기화가 이미 실행 중입니다", "System init is already running"));
+                if (_systemInitRunning)
+                {
+                    return Fail(T("전체 시스템 초기화가 이미 실행 중입니다", "System init is already running"));
+                }
+                if (_tiltRunning)
+                {
+                    return Fail(T("프로브 기울기 측정 중에는 전체 시스템 초기화를 할 수 없습니다", "System init is not allowed during probe tilt measurement"));
+                }
+                _systemInitRunning = true;
             }
-            _systemInitRunning = true;
+            _systemInitVersions = null;
             _systemInitStopRequested = false;
             SystemInitAborted = false;
             try
@@ -321,6 +330,9 @@ namespace ValidationStage.Devices
         /// <summary>마지막 전체 시스템 초기화가 정지/비상 정지 명령으로 중단됐으면 true (다음 실행을 시작하면 false 로 돌아간다).</summary>
         public bool SystemInitAborted { get; private set; }
 
+        // 전체 시스템 초기화와 프로브 기울기 측정은 동시에 실행하지 않는다.
+        private readonly object _sequenceLock = new object();
+
         private volatile bool _systemInitRunning;
         private volatile bool _systemInitStopRequested;
         private volatile int _systemInitStep;
@@ -328,6 +340,7 @@ namespace ValidationStage.Devices
         // 정지/비상 정지가 눌리면 초기화가 다음 단계로 넘어가지 않게 표시한다 (이동 중이던 단계는 장비 쪽에서 실패로 끝난다).
         private void RequestSystemInitStop()
         {
+            RequestTiltStop();
             if (_systemInitRunning)
             {
                 _systemInitStopRequested = true;
@@ -444,6 +457,7 @@ namespace ValidationStage.Devices
             {
                 return false;
             }
+            _systemInitVersions = CurrentReferenceVersions();
             _log.Add(T("전체 시스템 초기화 완료", "System init done"));
             return true;
         }

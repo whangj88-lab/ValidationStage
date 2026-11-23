@@ -66,7 +66,11 @@
     <Compile Include="PI_GCS2.cs" />
     <Compile Include="Probe.cs" />
     <Compile Include="ProbeTiltCorrection.cs" />
+    <Compile Include="ProbeTiltMeasurement.cs" />
     <Compile Include="ValidationSystem.cs" />
+    <Compile Include="ValidationSystem.ProbeTilt.cs">
+      <DependentUpon>ValidationSystem.cs</DependentUpon>
+    </Compile>
     <Compile Include="View3D\Hexapod3DForm.cs">
       <SubType>Form</SubType>
     </Compile>

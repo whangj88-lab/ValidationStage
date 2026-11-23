@@ -56,14 +56,23 @@ namespace ValidationStage.Devices
         private readonly object _axisLock = new object();
         private CancellationTokenSource _cancelTokenSource;
 
-        private readonly double[] _pivot = new double[3];
         private readonly double[] _coordinateSystem = new double[6];
 
         // qTMN/qTMX 가 이 컨트롤러 좌표계에서 미지원(GCS 551)이면 true - 다시 묻지 않는다.
         private bool _limitQueryUnsupported;
 
+        // 피벗을 바꾸는 동안(잠깐 ZERO 좌표계가 활성이 됨) 이동 명령이 나가지 않게 한다.
+        private readonly object _motionLock = new object();
+
+        // 피벗은 이 각도 안에서만 바꾼다 (arcmin). 기울어진 채 바꾸면 X, Y, Z 좌표가 0 이 아니게 되어 원점으로 이동해도 제자리로 돌아오지 않는다.
+        private const double PivotTiltTolerance = 0.05;
+
         // 축별 정지 명령 횟수 (TX,TY,TZ 순서). MoveAsync 가 기다리는 사이 바뀌면 정지 명령으로 중단된 것으로 보고 실패를 돌려준다.
         private readonly int[] _stopCounts = new int[3];
+
+        // 0(원점/영점)의 기준이 바뀔 때마다 1 씩 늘어난다. ValidationSystem.IsSystemInitialized 가 초기화 뒤 바뀌었는지 본다.
+        private int _referenceVersion;
+        internal int ReferenceVersion => Volatile.Read(ref _referenceVersion);
 
         // 좌표계 이름 → 소프트웨어 리밋. 없는 좌표계는 기본값(±300 arcmin). 저장은 ValidationSystem 이 HexapodHost.txt 에 한다.
         private readonly Dictionary<string, HexapodSoftLimit> _softLimits = new Dictionary<string, HexapodSoftLimit>();
@@ -127,6 +136,7 @@ namespace ValidationStage.Devices
                 UpdateSpeedStatus();
                 _log.Add(T("연결됨", "Connected"));
                 EnsureTiltedCoordSystem();
+                Interlocked.Increment(ref _referenceVersion);
                 return true;
             }
             catch (Exception ex)
@@ -207,6 +217,7 @@ namespace ValidationStage.Devices
             {
                 return;
             }
+            Interlocked.Increment(ref _referenceVersion);
             _cancelTokenSource?.Cancel();
             Thread.Sleep(100);
             PI_GCS2.CloseConnection(_deviceId);
@@ -283,26 +294,30 @@ namespace ValidationStage.Devices
                 string sAxes = string.Join(" ", axes.Select(axis => PiAxisNames[(int)axis]));
                 double[] degrees = positions.Select(arcmin => arcmin / -60).ToArray();   // arcmin -> deg
 
-                // 소프트웨어 리밋: 목표(상대 이동이면 현재 위치 + 이동량) 중 하나라도 벗어나면 명령 전체를 보내지 않는다.
-                double[] targets = positions;
-                if (!isAbsolute)
+                int[] stops;
+                lock (_motionLock)
                 {
-                    double[] current = new double[axes.Length];
-                    if (PI_GCS2.qPOS(_deviceId, sAxes, current) == PI_RESULT_FAILURE)
+                    // 소프트웨어 리밋: 목표(상대 이동이면 현재 위치 + 이동량) 중 하나라도 벗어나면 명령 전체를 보내지 않는다.
+                    double[] targets = positions;
+                    if (!isAbsolute)
                     {
-                        throw GcsFail(T("이동 명령: 위치 조회 실패", "Move: failed to read positions"));
+                        double[] current = new double[axes.Length];
+                        if (PI_GCS2.qPOS(_deviceId, sAxes, current) == PI_RESULT_FAILURE)
+                        {
+                            throw GcsFail(T("이동 명령: 위치 조회 실패", "Move: failed to read positions"));
+                        }
+                        targets = current.Select((deg, i) => deg * -60 + positions[i]).ToArray();
                     }
-                    targets = current.Select((deg, i) => deg * -60 + positions[i]).ToArray();
-                }
-                CheckSoftLimit(axes, targets);
+                    CheckSoftLimit(axes, targets);
 
-                int[] stops = SnapshotStops(axes);
-                int ret = isAbsolute
-                    ? PI_GCS2.MOV(_deviceId, sAxes, degrees)
-                    : PI_GCS2.MVR(_deviceId, sAxes, degrees);
-                if (ret == PI_RESULT_FAILURE)
-                {
-                    throw GcsFail(T("이동 명령 실패", "Move command failed"));
+                    stops = SnapshotStops(axes);
+                    int ret = isAbsolute
+                        ? PI_GCS2.MOV(_deviceId, sAxes, degrees)
+                        : PI_GCS2.MVR(_deviceId, sAxes, degrees);
+                    if (ret == PI_RESULT_FAILURE)
+                    {
+                        throw GcsFail(T("이동 명령 실패", "Move command failed"));
+                    }
                 }
 
                 await WaitForReadyAsync();
@@ -325,6 +340,14 @@ namespace ValidationStage.Devices
         /// 활성 좌표계의 소프트웨어 리밋이 있으면 그 값에서 멈춘다.
         /// </summary>
         public bool JogRun(Axis axis, bool dir)
+        {
+            lock (_motionLock)
+            {
+                return StartJog(axis, dir);
+            }
+        }
+
+        private bool StartJog(Axis axis, bool dir)
         {
             try
             {
@@ -535,6 +558,7 @@ namespace ValidationStage.Devices
             try
             {
                 CheckConnected();
+                Interlocked.Increment(ref _referenceVersion);
 
                 int[] servo = new int[6];
                 if (PI_GCS2.qSVO(_deviceId, AllAxes, servo) != PI_RESULT_FAILURE && servo.Any(s => s == 0))
@@ -546,9 +570,12 @@ namespace ValidationStage.Devices
                     _log.Add(T("서보 ON", "Servo ON"));
                 }
 
-                if (PI_GCS2.FRF(_deviceId, AllAxes) == PI_RESULT_FAILURE)
+                lock (_motionLock)
                 {
-                    throw GcsFail(T("레퍼런스(FRF) 실패", "Reference (FRF) failed"));
+                    if (PI_GCS2.FRF(_deviceId, AllAxes) == PI_RESULT_FAILURE)
+                    {
+                        throw GcsFail(T("레퍼런스(FRF) 실패", "Reference (FRF) failed"));
+                    }
                 }
 
                 // FRF 직후 잠깐은 아직 움직이기 전이라 이동 중 여부만으로는 끝을 알 수 없어서 qFRF 결과까지 기다린다.
@@ -773,24 +800,30 @@ namespace ValidationStage.Devices
             return SetSpeed(DefaultSpeedLevelValues[(int)level] * SpeedLevelFactor);
         }
 
-        /// <summary>회전 중심(피벗, SPI)을 설정한다. 단위 mm (컨트롤러 값 그대로).</summary>
+        /// <summary>
+        /// 회전 중심(피벗)을 설정한다. 단위 mm, 방향은 TILTEDCS 의 부모 좌표계(CSHCS) 축 (TILTEDCS 의 각도가 0 이면 TILTEDCS 축과 같다).
+        /// 컨트롤러의 피벗 명령(SPI)은 이 좌표계 유형(KSD)에서 지원되지 않아서, 회전 중심이 되는 TILTEDCS 의 원점 X, Y, Z 를 옮긴다 (각도와 부모 연결은 그대로).
+        /// 플랫폼은 움직이지 않는다. 다시 설정할 때까지 컨트롤러에 남는다 (재연결해도 유지).
+        /// 레퍼런스가 잡혀 있고, TILTEDCS 가 활성이며, 정지 상태에서 TX, TY, TZ = 0 일 때만 된다. 실패하면 이전 피벗으로 되돌린다.
+        /// </summary>
+        /// <param name="x">피벗 X (mm)</param>
+        /// <param name="y">피벗 Y (mm)</param>
+        /// <param name="z">피벗 Z (mm)</param>
         public bool SetPivot(double x, double y, double z)
         {
             try
             {
-                CheckConnected();
-                if (IsMoving)
+                double[] pivot = { x, y, z };
+                if (pivot.Any(v => double.IsNaN(v) || double.IsInfinity(v)))
                 {
-                    throw new DeviceException(T("이동 중이라 피벗을 바꿀 수 없습니다", "SetPivot (SPI) command is not ready (moving)"));
+                    throw new DeviceException(T("피벗 값이 숫자가 아닙니다", "Pivot value is not a number"));
                 }
-                if (PI_GCS2.SPI(_deviceId, "X Y Z", new double[] { x, y, z }) == PI_RESULT_FAILURE)
+                lock (_motionLock)
                 {
-                    throw GcsFail(T("피벗 설정(SPI) 실패", "SetPivot (SPI) command failed"));
+                    ChangePivot(pivot);
                 }
-                if (PI_GCS2.qSPI(_deviceId, "X Y Z", _pivot) == PI_RESULT_FAILURE)
-                {
-                    _errors.Fail(GcsFail(T("피벗 조회(qSPI) 실패", "GetPivot (qSPI) failed")));
-                }
+                _log.Add(string.Format(CultureInfo.InvariantCulture,
+                    T("피벗 설정: {0:0.######}, {1:0.######}, {2:0.######} mm", "Pivot set: {0:0.######}, {1:0.######}, {2:0.######} mm"), x, y, z));
                 return true;
             }
             catch (Exception ex)
@@ -800,10 +833,126 @@ namespace ValidationStage.Devices
             }
         }
 
-        /// <summary>마지막으로 <see cref="SetPivot"/> 한 피벗 (mm). 설정 전에는 0, 0, 0.</summary>
+        /// <summary>컨트롤러에 설정된 회전 중심(피벗) X, Y, Z 를 읽는다 (mm, <see cref="SetPivot"/> 과 같은 기준). TILTEDCS 가 활성이 아니거나 실패하면 null.</summary>
         public double[] GetPivot()
         {
-            return _pivot.ToArray();
+            try
+            {
+                CheckConnected();
+                CheckTiltedCSActive();
+                return CoordSystemPose(ReadTiltedCS()).Take(3).ToArray();
+            }
+            catch (Exception ex)
+            {
+                _errors.Fail(ex);
+                return null;
+            }
+        }
+
+        private void ChangePivot(double[] pivot)
+        {
+            CheckConnected();
+            if (ReadIsMovings().Any(moving => moving))
+            {
+                throw new DeviceException(T("이동 중이라 피벗을 바꿀 수 없습니다", "Pivot cannot be changed while moving"));
+            }
+            if (IsReferenced() != true)
+            {
+                throw new DeviceException(T("레퍼런스가 잡혀 있지 않아 피벗을 바꿀 수 없습니다", "Pivot cannot be changed - not referenced"));
+            }
+            CheckTiltedCSActive();
+            if (ReadPositions().Any(arcmin => Math.Abs(arcmin) > PivotTiltTolerance))
+            {
+                throw new DeviceException(T("TX, TY, TZ 가 0 이 아니라서 피벗을 바꿀 수 없습니다. 원점으로 이동한 뒤 다시 하세요",
+                    "TX, TY, TZ must be 0 to change the pivot. Move to zero first"));
+            }
+
+            HexapodCoordSystem before = ReadTiltedCS();
+            if (before.Type != "KSD")
+            {
+                throw new DeviceException(T($"{TiltedCSName} 의 유형이 KSD 가 아닙니다 ({before.Type})", $"{TiltedCSName} is not a KSD coordinate system ({before.Type})"));
+            }
+            double[] oldPose = CoordSystemPose(before);
+            double[] newPose = pivot.Concat(oldPose.Skip(3)).ToArray();
+
+            Interlocked.Increment(ref _referenceVersion);
+            try
+            {
+                RedefineTiltedCS(newPose, before.Parent);
+                HexapodCoordSystem after = ReadTiltedCS();
+                if (after.Parent != before.Parent || CoordSystemPose(after).Zip(newPose, (a, b) => Math.Abs(a - b)).Any(diff => diff > 1e-5))
+                {
+                    throw new DeviceException(T("피벗을 설정했지만 컨트롤러 값이 다릅니다", "Pivot was set but the controller value differs"));
+                }
+            }
+            catch (Exception ex)
+            {
+                try
+                {
+                    RedefineTiltedCS(oldPose, before.Parent);
+                }
+                catch (Exception restoreEx)
+                {
+                    throw new DeviceException(T($"{ex.Message} / 이전 피벗으로 되돌리지도 못했습니다 ({restoreEx.Message}). 활성 좌표계가 {TiltedCSName} 인지 확인할 때까지 헥사포드를 움직이지 마십시오",
+                        $"{ex.Message} / Failed to restore the previous pivot ({restoreEx.Message}). Do not move the hexapod until {TiltedCSName} is confirmed active"),
+                        (ex as DeviceException)?.Code ?? 0);
+                }
+                throw;
+            }
+        }
+
+        // TILTEDCS 를 다시 정의한다. 활성 상태에서는 정의할 수 없어서 잠깐 ZERO 를 활성화한다 (플랫폼은 움직이지 않음).
+        private void RedefineTiltedCS(double[] pose, string parent)
+        {
+            if (PI_GCS2.KEN(_deviceId, "ZERO") == PI_RESULT_FAILURE)
+            {
+                throw GcsFail(T("피벗: ZERO 활성화(KEN) 실패", "Pivot: activate ZERO (KEN) failed"));
+            }
+            if (PI_GCS2.KSD(_deviceId, TiltedCSName, AllAxes, pose) == PI_RESULT_FAILURE)
+            {
+                throw GcsFail(T($"피벗: {TiltedCSName} 정의(KSD) 실패", $"Pivot: define {TiltedCSName} (KSD) failed"));
+            }
+            // 다시 정의하면 부모가 ZERO 로 바뀔 수 있다.
+            if (ReadTiltedCS().Parent != parent && PI_GCS2.KLN(_deviceId, TiltedCSName, parent) == PI_RESULT_FAILURE)
+            {
+                throw GcsFail(T($"피벗: 좌표계 연결(KLN {TiltedCSName} → {parent}) 실패", $"Pivot: link coordinate system (KLN {TiltedCSName} → {parent}) failed"));
+            }
+            if (PI_GCS2.KEN(_deviceId, TiltedCSName) == PI_RESULT_FAILURE)
+            {
+                throw GcsFail(T($"피벗: {TiltedCSName} 활성화(KEN) 실패", $"Pivot: activate {TiltedCSName} (KEN) failed"));
+            }
+            CheckTiltedCSActive();
+        }
+
+        private void CheckTiltedCSActive()
+        {
+            string active = GetActiveUserCoordSystem();
+            if (active != TiltedCSName)
+            {
+                throw new DeviceException(T($"피벗은 {TiltedCSName} 좌표계가 활성일 때만 쓸 수 있습니다 (활성: {active ?? "조회 실패"})",
+                    $"Pivot is available only while {TiltedCSName} is active (active: {active ?? "query failed"})"));
+            }
+        }
+
+        private HexapodCoordSystem ReadTiltedCS()
+        {
+            return ReadCoordSystems().FirstOrDefault(cs => cs.Name == TiltedCSName)
+                ?? throw new DeviceException(T($"좌표계 {TiltedCSName} 이(가) 없습니다", $"Coordinate system {TiltedCSName} not found"));
+        }
+
+        // 좌표계 정의값 X,Y,Z mm / U,V,W deg (KLS? 의 POS)
+        private static double[] CoordSystemPose(HexapodCoordSystem cs)
+        {
+            var pose = new double[PiAxisNames.Length];
+            for (int i = 0; i < pose.Length; i++)
+            {
+                if (!cs.Items.TryGetValue("POS", out Dictionary<string, string> pos) || !pos.TryGetValue(PiAxisNames[i], out string text)
+                    || !double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out pose[i]))
+                {
+                    throw new DeviceException(T($"좌표계 {cs.Name} 의 값(POS)을 읽지 못했습니다", $"Failed to read the pose (POS) of coordinate system {cs.Name}"));
+                }
+            }
+            return pose;
         }
 
         /// <summary>마지막으로 <see cref="SetCoordinateSystem"/> 한 좌표계 위치 (X,Y,Z: µm / U,V,W: arcmin). 설정 전에는 모두 0.</summary>
@@ -832,6 +981,7 @@ namespace ValidationStage.Devices
                 {
                     throw new DeviceException(T("이동 중이라 좌표계를 바꿀 수 없습니다", "SetCoordinateSystem command is not ready (moving)"));
                 }
+                Interlocked.Increment(ref _referenceVersion);
 
                 string csName = "TILTEDCS";
                 StringBuilder buffer = new StringBuilder(1024);
@@ -885,41 +1035,10 @@ namespace ValidationStage.Devices
         {
             try
             {
-                CheckConnected();
-                var buffer = new StringBuilder(65536);
-                if (PI_GCS2.qKLS(_deviceId, null, null, null, buffer, buffer.Capacity) == PI_RESULT_FAILURE)
-                {
-                    throw GcsFail(T("좌표계 목록 조회(KLS?) 실패", "Coordinate system list (KLS?) failed"));
-                }
-
-                // KLS? 응답은 XML (2026-10-02 실제 장비): <SingleCoordinateSystem><ZERO Name= Parent= Used= Type=><POS X=.. /><NLM/>...</ZERO>...
-                var list = new List<HexapodCoordSystem>();
-                XElement root;
-                try
-                {
-                    root = XElement.Parse(buffer.ToString().Trim());
-                }
-                catch (Exception ex)
-                {
-                    throw new DeviceException(T("좌표계 목록(KLS?) 해석 실패 - ", "Failed to parse coordinate system list (KLS?) - ") + ex.Message);
-                }
-                foreach (var element in root.Elements())
-                {
-                    var cs = new HexapodCoordSystem
-                    {
-                        Name = (string)element.Attribute("Name") ?? element.Name.LocalName,
-                        Parent = (string)element.Attribute("Parent"),
-                        Type = (string)element.Attribute("Type"),
-                    };
-                    foreach (var item in element.Elements())
-                    {
-                        cs.Items[item.Name.LocalName] = item.Attributes().ToDictionary(a => a.Name.LocalName, a => a.Value);
-                    }
-                    list.Add(cs);
-                }
+                List<HexapodCoordSystem> list = ReadCoordSystems();
 
                 // KEN? 은 "PI_LEVELLING=KLD(PI)" 처럼 활성인 것만 나오고 ZERO 는 안 나온다.
-                buffer.Clear();
+                var buffer = new StringBuilder(65536);
                 if (PI_GCS2.qKEN(_deviceId, "", buffer, buffer.Capacity) == PI_RESULT_FAILURE)
                 {
                     _errors.Fail(GcsFail(T("활성 좌표계 조회(KEN?) 실패", "Active coordinate system query (KEN?) failed")));
@@ -947,6 +1066,44 @@ namespace ValidationStage.Devices
                 _errors.Fail(ex);
                 return null;
             }
+        }
+
+        // 정의된 좌표계 목록 (KLS?, IsActive 는 채우지 않음). 실패하면 예외.
+        private List<HexapodCoordSystem> ReadCoordSystems()
+        {
+            CheckConnected();
+            var buffer = new StringBuilder(65536);
+            if (PI_GCS2.qKLS(_deviceId, null, null, null, buffer, buffer.Capacity) == PI_RESULT_FAILURE)
+            {
+                throw GcsFail(T("좌표계 목록 조회(KLS?) 실패", "Coordinate system list (KLS?) failed"));
+            }
+
+            // KLS? 응답은 XML (2026-10-02 실제 장비): <SingleCoordinateSystem><ZERO Name= Parent= Used= Type=><POS X=.. /><NLM/>...</ZERO>...
+            var list = new List<HexapodCoordSystem>();
+            XElement root;
+            try
+            {
+                root = XElement.Parse(buffer.ToString().Trim());
+            }
+            catch (Exception ex)
+            {
+                throw new DeviceException(T("좌표계 목록(KLS?) 해석 실패 - ", "Failed to parse coordinate system list (KLS?) - ") + ex.Message);
+            }
+            foreach (var element in root.Elements())
+            {
+                var cs = new HexapodCoordSystem
+                {
+                    Name = (string)element.Attribute("Name") ?? element.Name.LocalName,
+                    Parent = (string)element.Attribute("Parent"),
+                    Type = (string)element.Attribute("Type"),
+                };
+                foreach (var item in element.Elements())
+                {
+                    cs.Items[item.Name.LocalName] = item.Attributes().ToDictionary(a => a.Name.LocalName, a => a.Value);
+                }
+                list.Add(cs);
+            }
+            return list;
         }
 
         /// <summary>
@@ -997,6 +1154,7 @@ namespace ValidationStage.Devices
                 {
                     throw new DeviceException(T($"{what}: 이동 중에는 할 수 없습니다", $"{what}: not allowed while moving"));
                 }
+                Interlocked.Increment(ref _referenceVersion);
                 if (command(_deviceId) == PI_RESULT_FAILURE)
                 {
                     throw GcsFail(T($"{what} 실패", $"{what} failed"));

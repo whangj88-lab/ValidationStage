@@ -34,7 +34,18 @@ namespace ValidationStage.Devices
 
         private readonly LogBuffer _log = new LogBuffer("Probe");
         private readonly DeviceErrors _errors;
-        private readonly ProbeTiltCorrection _tiltCorrection;
+
+        // 기울기 보정 계수. 새로 측정해 적용하면 읽는 중에도 통째로 바뀐다.
+        private volatile ProbeTiltCorrection _tiltCorrection;
+        internal ProbeTiltCorrection TiltCorrection
+        {
+            get { return _tiltCorrection; }
+            set { _tiltCorrection = value; }
+        }
+
+        // 0(원점/영점)의 기준이 바뀔 때마다 1 씩 늘어난다. ValidationSystem.IsSystemInitialized 가 초기화 뒤 바뀌었는지 본다.
+        private int _referenceVersion;
+        internal int ReferenceVersion => Volatile.Read(ref _referenceVersion);
 
         /// <param name="labelFilePath">라벨 파일. 상대 경로면 <see cref="ValidationSystem.SettingsDirectory"/> 기준.</param>
         public Probe(string labelFilePath = "ProbeLabels.txt")
@@ -73,6 +84,7 @@ namespace ValidationStage.Devices
                 {
                     try
                     {
+                        Interlocked.Increment(ref _referenceVersion);
                         _server.Connect();
                         if (!_server.Connected)
                         {
@@ -154,6 +166,7 @@ namespace ValidationStage.Devices
             }
             try
             {
+                Interlocked.Increment(ref _referenceVersion);
                 if (_server.Connected)
                 {
                     _server.Disconnect();
@@ -189,6 +202,7 @@ namespace ValidationStage.Devices
                     try
                     {
                         OrbitModules modules = _server.Networks[0].Modules;
+                        Interlocked.Increment(ref _referenceVersion);
                         int added = modules.Ping();
                         _log.Add(T($"스캔 완료 - 이번에 {added}개 추가, 전체 {modules.Count}개", $"Scan done - {added} added, {modules.Count} total"));
                         SetResolution18Bit();
@@ -222,6 +236,7 @@ namespace ValidationStage.Devices
                 {
                     try
                     {
+                        Interlocked.Increment(ref _referenceVersion);
                         bool added = _server.Networks[0].Modules.NotifyAddModule();
                         _log.Add(added ? T("모듈 추가됨", "Module added") : T("모듈 추가 취소됨", "Module add cancelled"));
                         if (added)
@@ -329,6 +344,7 @@ namespace ValidationStage.Devices
                 {
                     throw new DeviceException(T($"모듈 {moduleId} 이(가) 없습니다", $"Module {moduleId} not found"));
                 }
+                Interlocked.Increment(ref _referenceVersion);
                 _zeroOffsets[moduleId] = ReadMicrometers(m);
                 return true;
             }
@@ -359,6 +375,7 @@ namespace ValidationStage.Devices
                     _errors.Fail(T("연결되어 있지 않습니다", "Not connected"));
                     return false;
                 }
+                Interlocked.Increment(ref _referenceVersion);
                 bool ok = true;
                 OrbitModules modules = _server.Networks[0].Modules;
                 for (int i = 0; i < modules.Count; i++)
@@ -411,6 +428,73 @@ namespace ValidationStage.Devices
                 channel.ErrorMessage = ex.Message;
             }
             return channel;
+        }
+
+        // 기울기 측정에 쓰는 7개 라벨의 모듈이 하나씩 있는지 확인한다 (값은 읽지 않음).
+        internal bool CheckTiltModules()
+        {
+            return WithTiltModules(modules => modules) != null;
+        }
+
+        // 7개 라벨 모듈의 영점 적용, 보정 전 값 (µm, ProbeTiltCorrection.Labels 순서). 하나라도 실패하면 null (LastError + 로그).
+        internal double[] ReadZeroed()
+        {
+            return WithTiltModules(modules => modules.Select(module =>
+            {
+                try
+                {
+                    _zeroOffsets.TryGetValue(module.ModuleID, out double offset);
+                    return ReadMicrometers(module) - offset;
+                }
+                catch (Exception ex)
+                {
+                    throw new DeviceException(T($"{LabelOf(module.ModuleID)} 프로브 읽기 실패: {ex.Message}", $"Probe {LabelOf(module.ModuleID)} read failed: {ex.Message}"));
+                }
+            }).ToArray());
+        }
+
+        private TResult WithTiltModules<TResult>(Func<OrbitModule[], TResult> action) where TResult : class
+        {
+            // 주기 읽기가 잡고 있을 수 있으므로 기다린다.
+            if (!Monitor.TryEnter(_busLock, 3000))
+            {
+                _errors.Fail(T("프로브가 사용 중(스캔 등)입니다", "Probe is busy (scanning etc.)"));
+                return null;
+            }
+            try
+            {
+                if (!HasNetwork())
+                {
+                    throw new DeviceException(T("연결되어 있지 않습니다", "Not connected"));
+                }
+                OrbitModules modules = _server.Networks[0].Modules;
+                var all = new List<OrbitModule>();
+                for (int i = 0; i < modules.Count; i++)
+                {
+                    all.Add(modules[i]);
+                }
+                return action(ProbeTiltCorrection.Labels.Select(label =>
+                {
+                    OrbitModule[] matches = all
+                        .Where(module => string.Equals(LabelOf(module.ModuleID).Trim(), label, StringComparison.OrdinalIgnoreCase))
+                        .ToArray();
+                    if (matches.Length != 1)
+                    {
+                        throw new DeviceException(T($"라벨 {label} 프로브가 {matches.Length}개입니다 (X, Y, TZ1, TZ2, TX, TY1, TY2 가 하나씩 있어야 합니다)",
+                            $"{matches.Length} probe(s) labelled {label} (X, Y, TZ1, TZ2, TX, TY1, TY2 must each exist once)"));
+                    }
+                    return matches[0];
+                }).ToArray());
+            }
+            catch (Exception ex)
+            {
+                _errors.Fail(ex);
+                return null;
+            }
+            finally
+            {
+                Monitor.Exit(_busLock);
+            }
         }
 
         // 라벨 X, Y, TZ1, TZ2, TX, TY1, TY2 모듈이 하나씩 모두 정상으로 읽혔을 때만 보정값을 채운다 (아니면 모두 null).

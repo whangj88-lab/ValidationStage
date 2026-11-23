@@ -88,6 +88,10 @@ namespace ValidationStage.Devices
         // 축별 정지 명령 횟수 (X,Y,Z 순서). 이동/원점 찾기가 기다리는 사이 이 값이 바뀌면 정지 명령으로 중단된 것으로 보고 실패를 돌려준다.
         private readonly int[] _stopCounts = new int[3];
 
+        // 0(원점/영점)의 기준이 바뀔 때마다 1 씩 늘어난다. ValidationSystem.IsSystemInitialized 가 초기화 뒤 바뀌었는지 본다.
+        private int _referenceVersion;
+        internal int ReferenceVersion => Volatile.Read(ref _referenceVersion);
+
         private readonly LogBuffer _log = new LogBuffer("Stage");
         private readonly DeviceErrors _errors;
 
@@ -178,6 +182,7 @@ namespace ValidationStage.Devices
                 Task.Run(() => PollingStatus(token));
 
                 _host = host;
+                Interlocked.Increment(ref _referenceVersion);
                 SetMachineOffsets(Axes, double.NaN);
                 _log.Add(T("연결됨", "Connected"));
                 WarnLimitMismatch();
@@ -201,6 +206,7 @@ namespace ValidationStage.Devices
             {
                 return;
             }
+            Interlocked.Increment(ref _referenceVersion);
             _pollCts?.Cancel();
             lock (_commLock)
             {
@@ -373,6 +379,7 @@ namespace ValidationStage.Devices
                     WriteIfDifferent(axisNo, "hmad", speed * 10);
                     WriteIfDifferent(axisNo, "hmvf", speed / 10);
                 }
+                Interlocked.Increment(ref _referenceVersion);
                 SetMachineOffsets(axes, double.NaN);   // 끝까지 성공해야 기계 좌표가 된다
                 int[] stops = SnapshotStops(axes);
                 for (int i = 0; i < axes.Length; i++)
@@ -413,6 +420,7 @@ namespace ValidationStage.Devices
             try
             {
                 CheckReady(axes);
+                Interlocked.Increment(ref _referenceVersion);
                 UpdateStatuses();   // p0 직전 위치로 기계 좌표 오프셋을 옮긴다
                 foreach (Axis axis in axes)
                 {

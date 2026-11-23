@@ -140,6 +140,7 @@
             this._probeScanButton = new System.Windows.Forms.Button();
             this._probeNotifyButton = new System.Windows.Forms.Button();
             this._probeZeroAllButton = new System.Windows.Forms.Button();
+            this._probeTiltButton = new System.Windows.Forms.Button();
             this._probeConnLabel = new System.Windows.Forms.Label();
             this._logBox = new System.Windows.Forms.TextBox();
             this._probeTimer = new System.Windows.Forms.Timer(this.components);
@@ -1437,6 +1438,7 @@
             this._probeBtnRow.Controls.Add(this._probeScanButton);
             this._probeBtnRow.Controls.Add(this._probeNotifyButton);
             this._probeBtnRow.Controls.Add(this._probeZeroAllButton);
+            this._probeBtnRow.Controls.Add(this._probeTiltButton);
             this._probeBtnRow.Controls.Add(this._probeConnLabel);
             this._probeBtnRow.Dock = System.Windows.Forms.DockStyle.Top;
             this._probeBtnRow.Location = new System.Drawing.Point(3, 19);
@@ -1505,6 +1507,17 @@
             this._probeZeroAllButton.UseVisualStyleBackColor = true;
             this._probeZeroAllButton.Click += new System.EventHandler(this.ProbeZeroAllButton_Click);
             // 
+            // _probeTiltButton
+            //
+            this._probeTiltButton.Location = new System.Drawing.Point(585, 9);
+            this._probeTiltButton.Name = "_probeTiltButton";
+            this._probeTiltButton.Size = new System.Drawing.Size(120, 23);
+            this._probeTiltButton.TabIndex = 5;
+            this._probeTiltButton.Text = "기울기 보정 측정";
+            this._probeTiltButton.UseVisualStyleBackColor = true;
+            this._probeTiltButton.Visible = false;
+            this._probeTiltButton.Click += new System.EventHandler(this.ProbeTiltButton_Click);
+            //
             // _probeConnLabel
             // 
             this._probeConnLabel.AutoSize = true;
@@ -1652,6 +1665,7 @@
         private System.Windows.Forms.Button _probeScanButton;
         private System.Windows.Forms.Button _probeNotifyButton;
         private System.Windows.Forms.Button _probeZeroAllButton;
+        private System.Windows.Forms.Button _probeTiltButton;
         private System.Windows.Forms.Label _probeConnLabel;
         private System.Windows.Forms.DataGridView _probeGrid;
         private System.Windows.Forms.DataGridViewTextBoxColumn _colModuleId;
