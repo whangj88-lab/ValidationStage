@@ -13,10 +13,10 @@ namespace ValidationStage.Devices
     /// Solartron Orbit3 프로브 (RS232IM / USBIM / ETHIM 컨트롤러 한 대에 DP10, DP20 등 Digital Probe 모듈이
     /// 데이지체인으로 여러 개 연결된 구성). 연결된 모듈 하나 = 채널 하나이며 개수는 고정하지 않는다.
     /// 값 단위: µm. 모듈ID → 라벨(예: "TZ1") 매핑은 <see cref="ValidationSystem.SettingsDirectory"/> 의 ProbeLabels.txt 에 저장된다.
-    /// 라벨이 X, Y, TZ1, TZ2, TX, TY1, TY2 인 7개 모듈이 있으면 <see cref="ReadAll"/> 이 기울기 보정값(<see cref="ProbeChannel.CorrectedReading"/>)도 채운다.
+    /// 라벨이 X, Y, TZ1, TZ2, TX, TY1, TY2 인 7개 모듈이 있으면 <see cref="ReadAll"/> 이 기울기 보정값(<see cref="ProbeChannel.CorrectedReading"/>)을 채운다 (보정 전 값은 공개하지 않는다).
     /// </summary>
     /// <remarks>
-    /// 읽기(<see cref="ReadAll"/>, <see cref="Read"/>)는 호출할 때마다 실제로 읽는다. 상태를 기억하지 않는다.
+    /// 읽기(<see cref="ReadAll"/>)는 호출할 때마다 실제로 읽는다. 상태를 기억하지 않는다.
     /// 케이블이 빠진 모듈은 Receive Timeout 까지 기다린 뒤 오류를 돌려주므로 백그라운드 스레드에서 호출한다.
     /// 통신 오류(<see cref="ProbeReadStatus.CommError"/>)가 나면 반복 호출을 멈추고, 케이블을 확인한 뒤 다시 호출한다.
     /// 끊긴 모듈을 계속 읽으면 케이블을 다시 꽂아도 컨트롤러 전원을 다시 켜기 전까지 복구되지 않을 수 있다.
@@ -29,7 +29,7 @@ namespace ValidationStage.Devices
         private readonly string _labelFilePath;
 
         // SDK(모듈 목록/읽기) 접근을 직렬화한다. ReadAll 은 다른 작업 중이면 기다리지 않고 Busy 를 돌려주고,
-        // 개별 읽기/영점/해제는 잠깐 기다린 뒤 포기한다.
+        // 영점/해제는 잠깐 기다린 뒤 포기한다.
         private readonly object _busLock = new object();
 
         private readonly LogBuffer _log = new LogBuffer("Probe");
@@ -244,7 +244,7 @@ namespace ValidationStage.Devices
         #region 읽기
 
         /// <summary>
-        /// 모든 모듈의 현재값을 한 번 읽는다 (영점 적용, µm). 스캔 등 다른 작업 중이면 기다리지 않고 Busy 를 돌려준다.
+        /// 모든 모듈의 현재값을 한 번 읽는다 (영점 + 기울기 보정 적용, µm, <see cref="ProbeChannel.CorrectedReading"/>). 스캔 등 다른 작업 중이면 기다리지 않고 Busy 를 돌려준다.
         /// 한 모듈이라도 통신 오류면 Status = CommError (각 채널의 IsError/ErrorMessage 로 어느 모듈인지 확인).
         /// CommError 를 받으면 반복 호출을 멈추고 케이블 확인 후 다시 호출한다 (클래스 설명 참고).
         /// </summary>
@@ -268,46 +268,6 @@ namespace ValidationStage.Devices
                 }
                 ApplyTiltCorrection(channels);
                 return new ProbeReadResult(channels.Any(ch => ch.IsError) ? ProbeReadStatus.CommError : ProbeReadStatus.Ok, channels);
-            }
-            finally
-            {
-                Monitor.Exit(_busLock);
-            }
-        }
-
-        /// <summary>
-        /// 모듈 하나만 한 번 읽는다 (영점 적용, µm). 다른 작업 중이면 최대 1초 기다린 뒤 Busy.
-        /// 결과의 Channels 에는 해당 모듈 하나만 들어 있다 (Ok / CommError 일 때).
-        /// </summary>
-        public ProbeReadResult Read(string moduleId)
-        {
-            if (!Monitor.TryEnter(_busLock, 1000))
-            {
-                _log.Add(T("프로브가 사용 중(스캔 등)이라 읽지 못했습니다. 잠시 후 다시 시도하세요.", "Probe is busy (scanning etc.). Try again later."));
-                return new ProbeReadResult(ProbeReadStatus.Busy);
-            }
-            try
-            {
-                if (!HasNetwork())
-                {
-                    return new ProbeReadResult(ProbeReadStatus.NotConnected);
-                }
-                OrbitModules modules = _server.Networks[0].Modules;
-                int index = -1;
-                for (int i = 0; i < modules.Count; i++)
-                {
-                    if (modules[i].ModuleID == moduleId)
-                    {
-                        index = i;
-                        break;
-                    }
-                }
-                if (index < 0)
-                {
-                    return new ProbeReadResult(ProbeReadStatus.ModuleNotFound);
-                }
-                ProbeChannel channel = ReadChannel(modules[index], index);
-                return new ProbeReadResult(channel.IsError ? ProbeReadStatus.CommError : ProbeReadStatus.Ok, new List<ProbeChannel> { channel });
             }
             finally
             {
@@ -441,9 +401,9 @@ namespace ValidationStage.Devices
             var channel = new ProbeChannel { Index = index, ModuleId = m.ModuleID, Label = LabelOf(m.ModuleID) };
             try
             {
-                channel.RawReading = ReadMicrometers(m);
+                double value = ReadMicrometers(m);
                 _zeroOffsets.TryGetValue(m.ModuleID, out double offset);
-                channel.Reading = channel.RawReading - offset;
+                channel.ZeroedReading = value - offset;
             }
             catch (Exception ex)
             {
@@ -469,7 +429,7 @@ namespace ValidationStage.Devices
                 }
                 targets[i] = matches[0];
             }
-            double[] corrected = _tiltCorrection.Apply(targets.Select(ch => ch.Reading).ToArray());
+            double[] corrected = _tiltCorrection.Apply(targets.Select(ch => ch.ZeroedReading).ToArray());
             for (int i = 0; i < labels.Length; i++)
             {
                 targets[i].CorrectedReading = corrected[i];
@@ -565,14 +525,12 @@ namespace ValidationStage.Devices
         public string ModuleId;
         /// <summary>라벨 (지정하지 않았으면 모듈 ID)</summary>
         public string Label;
-        /// <summary>영점 적용된 값 (µm)</summary>
-        public double Reading;
-        /// <summary>영점 적용 전 원시값 (µm)</summary>
-        public double RawReading;
+        // 영점 적용, 보정 전 값 (µm). 보정 계산에만 쓰고 공개하지 않는다.
+        internal double ZeroedReading;
         /// <summary>
-        /// 기울기 보정값 (µm). <see cref="Reading"/> 에 기울기/글라스 두께 보정을 한 값 (부호는 뒤집지 않음 - 모두 +).
-        /// <see cref="Probe.ReadAll"/> 에서 라벨이 X, Y, TZ1, TZ2, TX, TY1, TY2 인 모듈이 하나씩 모두 정상으로 읽혔을 때만 값이 있고,
-        /// 그 외(다른 라벨, 7개 중 누락/중복/오류, <see cref="Probe.Read"/> 개별 읽기)는 null.
+        /// 측정값 (µm). 영점 적용 값에 기울기/글라스 두께 보정을 한 값 (부호는 뒤집지 않음 - 모두 +).
+        /// 라벨이 X, Y, TZ1, TZ2, TX, TY1, TY2 인 모듈이 하나씩 모두 정상으로 읽혔을 때만 값이 있고,
+        /// 그 외(다른 라벨, 7개 중 누락/중복/오류)는 null.
         /// </summary>
         public double? CorrectedReading;
         /// <summary>이 모듈 읽기 실패 여부</summary>
@@ -591,9 +549,7 @@ namespace ValidationStage.Devices
         /// <summary>스캔 등 다른 작업 중이라 읽지 않음 - 잠시 후 다시 호출</summary>
         Busy,
         /// <summary>하나 이상의 모듈 통신 오류 - 반복 호출을 멈추고 케이블 확인 후 다시 호출</summary>
-        CommError,
-        /// <summary>지정한 모듈이 없음 (<see cref="Probe.Read"/>)</summary>
-        ModuleNotFound
+        CommError
     }
 
     /// <summary>프로브 읽기 결과.</summary>
@@ -601,7 +557,7 @@ namespace ValidationStage.Devices
     {
         /// <summary>상태</summary>
         public ProbeReadStatus Status { get; }
-        /// <summary>모듈별 값. NotConnected / Busy / ModuleNotFound 면 빈 목록.</summary>
+        /// <summary>모듈별 값. NotConnected / Busy 면 빈 목록.</summary>
         public List<ProbeChannel> Channels { get; }
 
         internal ProbeReadResult(ProbeReadStatus status, List<ProbeChannel> channels = null)

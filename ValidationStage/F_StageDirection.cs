@@ -10,10 +10,12 @@ namespace ValidationStage
 {
     /// <summary>
     /// 스테이지 X, Y, Z 모터 회전 방향(MMT "REV") 설정 창. 값은 컨트롤러에 저장된다.
+    /// 적용할 값은 StageHost.txt 의 MotorDirX/Y/Z 이다 (콤보는 실수로 바꾸지 못하게 표시만 한다. 설정값이 없는 축은 현재 값).
     /// 방향을 바꾸면 조그/이동/원점 찾기 방향이 모두 반대가 된다. 리밋 방향(HLS)은 DLL 이 같이 맞추고, 적용 후 자동으로 다시 연결한다.
     /// </summary>
     public partial class F_StageDirection : Form
     {
+        private readonly ValidationSystem _system;
         private readonly MotorizedStage _stage;
         private readonly Action<string> _log;
         private readonly Dictionary<Axis, Label> _currentLabels;
@@ -22,17 +24,18 @@ namespace ValidationStage
         private readonly Dictionary<Axis, bool?> _limitMatched = new Dictionary<Axis, bool?>();
         private bool _applying;
 
-        public F_StageDirection(MotorizedStage stage, Action<string> log)
+        public F_StageDirection(ValidationSystem system, Action<string> log)
         {
             InitializeComponent();
-            _stage = stage;
+            _system = system;
+            _stage = system.Stage;
             _log = log;
             _currentLabels = new Dictionary<Axis, Label> { { Axis.X, _xCurrentLabel }, { Axis.Y, _yCurrentLabel }, { Axis.Z, _zCurrentLabel } };
             _combos = new Dictionary<Axis, ComboBox> { { Axis.X, _xCombo }, { Axis.Y, _yCombo }, { Axis.Z, _zCombo } };
             ReadAll();
         }
 
-        /// <summary>X, Y, Z 의 현재 REV 값과 리밋 방향 일치 여부를 읽어 표시한다. 콤보도 현재 값으로 되돌린다.</summary>
+        /// <summary>X, Y, Z 의 현재 REV 값과 리밋 방향 일치 여부를 읽어 표시한다. 콤보에는 설정 파일 값(없으면 현재 값)을 넣는다.</summary>
         private void ReadAll()
         {
             foreach (Axis axis in MotorizedStage.Axes)
@@ -42,15 +45,19 @@ namespace ValidationStage
                 _current[axis] = dir;
                 _limitMatched[axis] = matched;
 
+                MotorDirection? setting = _system.GetStageMotorDirection(axis);
+                bool differs = dir.HasValue && setting.HasValue && dir != setting;
+
                 Label label = _currentLabels[axis];
                 if (!dir.HasValue)
                 {
                     label.Text = "읽기 실패";
                     label.ForeColor = Color.Red;
                 }
-                else if (matched == false)
+                else if (differs || matched == false)
                 {
-                    label.Text = DirectionText(dir.Value) + " / 리밋 불일치";
+                    string problem = !differs ? "리밋 불일치" : matched == false ? "설정·리밋 불일치" : "설정 불일치";
+                    label.Text = DirectionText(dir.Value) + " / " + problem;
                     label.ForeColor = Color.Red;
                 }
                 else
@@ -58,7 +65,7 @@ namespace ValidationStage
                     label.Text = DirectionText(dir.Value) + (matched == true ? " / 리밋 OK" : " / 리밋 ?");
                     label.ForeColor = SystemColors.ControlText;
                 }
-                _combos[axis].SelectedIndex = dir.HasValue ? (int)dir.Value : -1;
+                _combos[axis].SelectedIndex = dir.HasValue ? (int)(setting ?? dir.Value) : -1;
             }
         }
 
@@ -91,7 +98,7 @@ namespace ValidationStage
                 .ToArray();
             if (changed.Length == 0)
             {
-                MessageBox.Show(this, "바뀐 축이 없습니다.", "모터 방향", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show(this, "적용할 축이 없습니다 (컨트롤러 값이 설정과 같습니다).", "모터 방향", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
 

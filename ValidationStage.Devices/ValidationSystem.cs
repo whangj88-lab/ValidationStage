@@ -12,7 +12,7 @@ namespace ValidationStage.Devices
     /// Validation Stage 장비 전체 (Motorized Stage + Hexapod + Probe). 보통 이 클래스 하나만 만들어 쓴다.
     /// 제어 컨셉: X, Y, Z 는 <see cref="Stage"/>, TX, TY, TZ 는 <see cref="Hexapod"/> 가 담당하며, 축을 받는 함수는 자동으로 나눠 보낸다.
     /// 장비 전용 기능(좌표계, 프로브 스캔/읽기 등)은 <see cref="Stage"/>, <see cref="Hexapod"/>, <see cref="Probe"/> 를 직접 호출한다.
-    /// 연결 주소는 <see cref="SettingsDirectory"/> 의 StageHost.txt, HexapodHost.txt 에 저장된다 (StageHost.txt 에는 스테이지 원점 찾는 방향, HexapodHost.txt 에는 헥사포드 소프트웨어 리밋도 함께 저장).
+    /// 연결 주소는 <see cref="SettingsDirectory"/> 의 StageHost.txt, HexapodHost.txt 에 저장된다 (StageHost.txt 에는 스테이지 원점 찾는 방향/모터 방향, HexapodHost.txt 에는 헥사포드 소프트웨어 리밋도 함께 저장).
     /// </summary>
     public class ValidationSystem
     {
@@ -60,11 +60,16 @@ namespace ValidationStage.Devices
         private readonly Dictionary<Axis, HomeDirection> _stageHomeDirections = MotorizedStage.Axes
             .ToDictionary(axis => axis, axis => HomeDirection.Negative);
 
+        // 스테이지 축별 모터 방향 설정값 (StageHost.txt 의 MotorDirX/Y/Z). 파일에 적힌 축만 들어 있고, 없는 축은 검사하지 않는다.
+        // 파일을 직접 고쳐서만 정한다 (방향이 실수로 바뀌면 충돌 위험).
+        private readonly Dictionary<Axis, MotorDirection> _stageMotorDirections = new Dictionary<Axis, MotorDirection>();
+
         /// <summary>마지막으로 연결에 성공한 헥사포드 주소 (HexapodHost.txt). 저장된 적 없으면 "127.0.0.1".</summary>
         public string HexapodHost { get; private set; } = "127.0.0.1";
 
         /// <summary>
         /// 스테이지에 연결한다 (백그라운드 실행 - 응답 없는 주소면 2초 걸림). 성공하면 주소를 StageHost.txt 에 저장한다.
+        /// 컨트롤러의 모터 방향이 StageHost.txt 의 설정값과 다르면 경고 로그를 남긴다 (연결은 성공, <see cref="GetStageMotorDirectionMismatches"/> 참고).
         /// </summary>
         /// <param name="host">"192.168.0.123" 또는 "192.168.0.123:5001"</param>
         public async Task<bool> ConnectStageAsync(string host)
@@ -75,6 +80,11 @@ namespace ValidationStage.Devices
             }
             StageHost = host;
             SaveStageSettings();
+            string problem = await Task.Run(() => MotorDirectionProblem(MotorizedStage.Axes));
+            if (problem != null)
+            {
+                _log.Add(T("경고: ", "Warning: ") + problem);
+            }
             return true;
         }
 
@@ -276,7 +286,7 @@ namespace ValidationStage.Devices
         /// 그 위치를 스테이지 0 으로 설정 → 잠깐 기다린 뒤 프로브 전체 영점. 끝나면 스테이지/헥사포드 0 = 프로브 0 위치가 된다.
         /// 측정 원점이 저장된 적 없으면 스테이지 기계 원점 찾기까지만 하고 true 를 돌려준다 (그 뒤 측정 원점으로 쓸 위치로 옮겨
         /// <see cref="SaveStageMeasureOriginFromCurrent"/>). 축이 크게 움직이므로 주변 간섭(프로브 접촉 포함)을 확인한 뒤 호출한다.
-        /// 시작 전 확인: 세 장비 연결, 헥사포드 레퍼런스 - 하나라도 아니면 아무것도 움직이지 않는다.
+        /// 시작 전 확인: 세 장비 연결, 스테이지 모터 방향(<see cref="GetStageMotorDirectionMismatches"/>), 헥사포드 레퍼런스 - 하나라도 아니면 아무것도 움직이지 않는다.
         /// 실행 중 진행 단계는 <see cref="CurrentSystemInitStep"/> 으로 조회한다. 실행 중에 <see cref="EmergencyStopAllAsync"/> 나
         /// <see cref="StopAllAsync"/> 를 부르면 그 자리에서 중단하고(다음 단계로 넘어가지 않음) false 를 돌려주며,
         /// 이때 <see cref="SystemInitAborted"/> 가 true 다. 이미 실행 중이면 바로 false.
@@ -372,6 +382,10 @@ namespace ValidationStage.Devices
             if (!Stage.IsConnected)
             {
                 return Fail(T("스테이지가 연결되어 있지 않습니다", "Stage not connected"));
+            }
+            if (!CheckMotorDirections(MotorizedStage.Axes))
+            {
+                return false;
             }
             double[] origin = _stageMeasureOrigin;
             if (origin == null)
@@ -470,16 +484,27 @@ namespace ValidationStage.Devices
             return (double[])_stageMeasureOrigin?.Clone();
         }
 
-        /// <summary>스테이지 X, Y, Z 기계 원점 찾기 (축별로 지정한 리밋 방향으로 이동, 기본은 (−)방향). 주변 간섭을 확인한 뒤 호출한다.</summary>
+        /// <summary>스테이지 X, Y, Z 기계 원점 찾기 (축별로 지정한 리밋 방향으로 이동, 기본은 (−)방향). 주변 간섭을 확인한 뒤 호출한다. 모터 방향이 설정 파일과 다른 축이 있으면(<see cref="GetStageMotorDirectionMismatches"/>) 움직이지 않고 false.</summary>
         public async Task<bool> HomeStageAsync(HomeDirection x = HomeDirection.Negative,
             HomeDirection y = HomeDirection.Negative, HomeDirection z = HomeDirection.Negative)
         {
+            if (!CheckMotorDirections(MotorizedStage.Axes))
+            {
+                return false;
+            }
             return Track(await Stage.HomeAsync(MotorizedStage.Axes, new[] { x, y, z }), Stage.LastError);
         }
 
-        /// <summary>스테이지 한 축(X, Y, Z 중 하나)만 기계 원점 찾기. 주변 간섭을 확인한 뒤 호출한다.</summary>
+        /// <summary>
+        /// 스테이지 한 축(X, Y, Z 중 하나)만 기계 원점 찾기. 주변 간섭을 확인한 뒤 호출한다.
+        /// 그 축의 모터 방향이 설정 파일과 다르면(<see cref="GetStageMotorDirectionMismatches"/>) 움직이지 않고 false.
+        /// </summary>
         public async Task<bool> HomeStageAxisAsync(Axis axis, HomeDirection direction = HomeDirection.Negative)
         {
+            if (!CheckMotorDirections(new[] { axis }))
+            {
+                return false;
+            }
             return Track(await Stage.HomeAsync(new[] { axis }, new[] { direction }), Stage.LastError);
         }
 
@@ -506,6 +531,77 @@ namespace ValidationStage.Devices
             _stageHomeDirections[axis] = direction;
             SaveStageSettings();
             return true;
+        }
+
+        /// <summary>
+        /// StageHost.txt 에 적힌 축의 모터 방향 설정값 (MotorDirX/Y/Z). 적혀 있지 않으면 null.
+        /// 컨트롤러의 실제 값은 <see cref="MotorizedStage.GetMotorDirection"/>.
+        /// </summary>
+        /// <param name="axis">X, Y, Z 중 하나 (그 외 축은 null)</param>
+        public MotorDirection? GetStageMotorDirection(Axis axis)
+        {
+            return _stageMotorDirections.TryGetValue(axis, out MotorDirection direction) ? direction : (MotorDirection?)null;
+        }
+
+        /// <summary>
+        /// 컨트롤러의 모터 방향(REV)이 StageHost.txt 의 설정값(MotorDirX/Y/Z)과 다른 축 (예: 새 컨트롤러로 바꾸고 방향을 적용하지 않은 경우).
+        /// 설정값이 없는 축은 보지 않는다. 모두 같으면 빈 배열, 미연결이거나 읽지 못하면 null.
+        /// 다른 축이 있으면 기계 원점 찾기와 전체 시스템 초기화가 거부되므로 <see cref="MotorizedStage.SetMotorDirections"/> 로 설정값을 적용한다.
+        /// </summary>
+        public Axis[] GetStageMotorDirectionMismatches()
+        {
+            return FindMotorDirectionMismatches(MotorizedStage.Axes);
+        }
+
+        // 설정값이 있는 축만 컨트롤러에서 읽어 비교한다. 하나라도 읽지 못하면 null (원인은 Stage.LastError).
+        private Axis[] FindMotorDirectionMismatches(Axis[] axes)
+        {
+            if (!Stage.IsConnected)
+            {
+                return null;
+            }
+            var mismatches = new List<Axis>();
+            foreach (Axis axis in axes.Where(a => _stageMotorDirections.ContainsKey(a)))
+            {
+                MotorDirection? actual = Stage.GetMotorDirection(axis);
+                if (actual == null)
+                {
+                    return null;
+                }
+                if (actual != _stageMotorDirections[axis])
+                {
+                    mismatches.Add(axis);
+                }
+            }
+            return mismatches.ToArray();
+        }
+
+        // 모터 방향이 설정과 다르거나 확인하지 못하면 그 내용, 문제없으면 null.
+        private string MotorDirectionProblem(Axis[] axes)
+        {
+            Axis[] mismatches = FindMotorDirectionMismatches(axes);
+            if (mismatches == null)
+            {
+                return T("스테이지 모터 방향을 확인하지 못했습니다", "Could not check stage motor direction");
+            }
+            if (mismatches.Length == 0)
+            {
+                return null;
+            }
+            string list = string.Join(", ", mismatches.Select(axis => $"{axis}={_stageMotorDirections[axis]}"));
+            return T($"컨트롤러의 모터 방향이 설정(StageHost.txt: {list})과 다릅니다. 반대로 움직이므로 원점 찾기를 할 수 없습니다 - 모터 방향을 먼저 적용하십시오",
+                $"Motor direction in the controller differs from the settings (StageHost.txt: {list}). The axis moves the opposite way, so homing is blocked - apply the motor direction first");
+        }
+
+        // 원점 찾기 전 확인. 확인하지 못해도 막는다 (반대 방향으로 홈 서칭하면 충돌 위험). 미연결은 장비 쪽에서 실패 처리한다.
+        private bool CheckMotorDirections(Axis[] axes)
+        {
+            if (!Stage.IsConnected)
+            {
+                return true;
+            }
+            string problem = MotorDirectionProblem(axes);
+            return problem == null || Fail(problem);
         }
 
         /// <summary>스테이지 X, Y, Z 를 원점(0)으로 이동한다.</summary>
@@ -598,6 +694,7 @@ namespace ValidationStage.Devices
         // StageHost.txt:
         //   Host=192.168.0.123
         //   HomeDirX=Negative   (HomeDirY, HomeDirZ 도 같은 형식, Negative / Positive)
+        //   MotorDirX=Ccw       (MotorDirY, MotorDirZ 도 같은 형식, Ccw = REV0 / Cw = REV1, 적은 축만 검사)
         //   MeasureOrigin=x,y,z (µm, 기계 원점 기준, 저장했을 때만)
         private void LoadStageSettings()
         {
@@ -618,6 +715,19 @@ namespace ValidationStage.Devices
                 {
                     _stageHomeDirections[axis] = direction;
                 }
+                else if (kv.Key.StartsWith("MotorDir"))
+                {
+                    if (Enum.TryParse(kv.Key.Substring("MotorDir".Length), out Axis motorAxis) && IsStageAxis(motorAxis)
+                        && Enum.TryParse(kv.Value, true, out MotorDirection motorDirection) && Enum.IsDefined(typeof(MotorDirection), motorDirection))
+                    {
+                        _stageMotorDirections[motorAxis] = motorDirection;
+                    }
+                    else
+                    {
+                        _log.Add(T($"경고: StageHost.txt 의 모터 방향 설정을 읽지 못해 무시합니다 ({kv.Key}={kv.Value}) - Ccw 또는 Cw 로 적으십시오",
+                            $"Warning: ignoring invalid motor direction in StageHost.txt ({kv.Key}={kv.Value}) - use Ccw or Cw"));
+                    }
+                }
             }
 
             // 값이 잘못되면 저장 안 된 것으로 본다.
@@ -633,6 +743,8 @@ namespace ValidationStage.Devices
         {
             var lines = new List<string> { "Host=" + StageHost };
             lines.AddRange(_stageHomeDirections.Select(kv => $"HomeDir{kv.Key}={kv.Value}"));
+            lines.AddRange(MotorizedStage.Axes.Where(axis => _stageMotorDirections.ContainsKey(axis))
+                .Select(axis => $"MotorDir{axis}={_stageMotorDirections[axis]}"));
             if (_stageMeasureOrigin != null)
             {
                 lines.Add("MeasureOrigin=" + string.Join(",", _stageMeasureOrigin.Select(v => v.ToString("R", CultureInfo.InvariantCulture))));            }

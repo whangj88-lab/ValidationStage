@@ -23,7 +23,6 @@ namespace ValidationStage
         // (오류 난 모듈을 계속 읽고 있으면 재연결해도 전원 재투입 전까지 복구되지 않았음)
         private bool _probeReading;
         private bool _probeReadInFlight;
-        private readonly HashSet<string> _singleReadsInFlight = new HashSet<string>();
         private Hexapod3DForm _hexapod3DForm;
 
         // 연결 상태 표시를 바뀔 때만 갱신하려고 마지막 상태를 기억한다 ("연결 중..."/"연결 실패" 표시를 덮어쓰지 않게).
@@ -136,6 +135,10 @@ namespace ValidationStage
             homeBtn.Click += async (s, e) =>
             {
                 if (!RequireStageConnected())
+                {
+                    return;
+                }
+                if (!RequireMotorDirections(axis))
                 {
                     return;
                 }
@@ -262,6 +265,39 @@ namespace ValidationStage
                 return;
             }
             ResetSpeedToLow();
+
+            // 새 컨트롤러 등으로 모터 방향이 설정(StageHost.txt)과 다르면 바로 알린다.
+            RequireMotorDirections(MotorizedStage.Axes);
+        }
+
+        /// <summary>
+        /// 컨트롤러의 모터 방향이 설정(StageHost.txt)과 같은지 확인하고, 다르거나 읽지 못하면 팝업을 띄우고 false.
+        /// (DLL 도 원점 찾기/전체 시스템 초기화를 거부하지만, 실행 확인 창을 띄우기 전에 먼저 알린다)
+        /// </summary>
+        private bool RequireMotorDirections(params Axis[] axes)
+        {
+            Axis[] mismatches = _system.GetStageMotorDirectionMismatches();
+            string text;
+            if (mismatches == null)
+            {
+                text = "스테이지 모터 방향을 확인하지 못했습니다.\n\n" + _system.Stage.LastError;
+                AppendLog(L("[Stage] 모터 방향을 확인하지 못했습니다", "[Stage] Could not check motor direction"));
+            }
+            else
+            {
+                string list = string.Join(", ", mismatches.Where(axis => axes.Contains(axis)));
+                if (list.Length == 0)
+                {
+                    return true;
+                }
+                text = $"{list} 축의 모터 방향이 설정(StageHost.txt)과 다릅니다.\n이 상태로 움직이면 반대 방향으로 가서 충돌할 수 있습니다.\n\n" +
+                    "[모터 방향] 창에서 [적용]을 누른 뒤 저속 조그로 이동 방향과 양쪽 리밋을 확인하고 기계 원점 찾기를 하세요.\n" +
+                    "적용 전에는 기계 원점 찾기와 전체 시스템 초기화를 할 수 없습니다.";
+                AppendLog(L($"[Stage] 모터 방향이 설정과 다릅니다 ({list}) - [모터 방향]에서 적용하세요",
+                    $"[Stage] Motor direction differs from the settings ({list}) - apply it in [모터 방향] (Motor direction)"));
+            }
+            MessageBox.Show(this, text, "모터 방향 확인", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
         }
 
         private void StageDisconnectButton_Click(object sender, EventArgs e)
@@ -561,7 +597,7 @@ namespace ValidationStage
             {
                 return;
             }
-            using (var form = new F_StageDirection(_system.Stage, AppendLog))
+            using (var form = new F_StageDirection(_system, AppendLog))
             {
                 form.ShowDialog(this);
             }
@@ -569,7 +605,7 @@ namespace ValidationStage
 
         private async void StageFindHomeButton_Click(object sender, EventArgs e)
         {
-            if (!RequireStageConnected())
+            if (!RequireStageConnected() || !RequireMotorDirections(MotorizedStage.Axes))
             {
                 return;
             }
@@ -598,7 +634,8 @@ namespace ValidationStage
         private async void SystemInitButton_Click(object sender, EventArgs e)
         {
             bool hasOrigin = _system.GetStageMeasureOrigin() != null;
-            if (!RequireStageConnected() || (hasOrigin && (!RequireHexapodConnected() || !RequireProbeConnected())))
+            if (!RequireStageConnected() || (hasOrigin && (!RequireHexapodConnected() || !RequireProbeConnected()))
+                || !RequireMotorDirections(MotorizedStage.Axes))
             {
                 return;
             }
@@ -986,7 +1023,7 @@ namespace ValidationStage
             }
         }
 
-        private async void ProbeGrid_CellClick(object sender, DataGridViewCellEventArgs e)
+        private void ProbeGrid_CellClick(object sender, DataGridViewCellEventArgs e)
         {
             if (e.RowIndex < 0)
             {
@@ -998,61 +1035,9 @@ namespace ValidationStage
                 return;
             }
 
-            if ((e.ColumnIndex == _colZero.Index || e.ColumnIndex == _colRead.Index) && !RequireProbeConnected())
-            {
-                return;
-            }
-            if (e.ColumnIndex == _colZero.Index)
+            if (e.ColumnIndex == _colZero.Index && RequireProbeConnected())
             {
                 _system.Probe.Zero(moduleId);
-            }
-            else if (e.ColumnIndex == _colRead.Index)
-            {
-                await ReadSingleProbeAsync(moduleId);
-            }
-        }
-
-        /// <summary>
-        /// [읽기] 버튼: 해당 프로브 하나만 한 번 읽어 행에 표시한다. 연속 읽기 중지 상태에서도 쓸 수 있다.
-        /// 통신 오류여도 연속 읽기를 멈추지는 않는다 (연속 읽기 중이면 주기 읽기 쪽에서 처리됨).
-        /// </summary>
-        private async Task ReadSingleProbeAsync(string moduleId)
-        {
-            if (!_system.Probe.IsConnected || !_singleReadsInFlight.Add(moduleId))
-            {
-                return;   // 미연결이거나 같은 프로브를 이미 읽는 중 (끊긴 모듈은 Receive Timeout 까지 걸림)
-            }
-            ProbeReadResult result;
-            try
-            {
-                result = await Task.Run(() => _system.Probe.Read(moduleId));
-            }
-            finally
-            {
-                _singleReadsInFlight.Remove(moduleId);
-            }
-            // 미연결 / 사용 중(Busy) / 모듈 없음이면 값이 없다.
-            if (result.Channels.Count == 0 || IsDisposed)
-            {
-                return;
-            }
-            ProbeChannel ch = result.Channels[0];
-
-            // 읽는 동안 행이 지워졌을 수 있으므로(해제/스캔) 다시 찾는다.
-            DataGridViewRow row = _probeGrid.Rows
-                .Cast<DataGridViewRow>()
-                .FirstOrDefault(r => Convert.ToString(r.Cells[_colModuleId.Index].Value) == moduleId);
-            if (row == null)
-            {
-                return;
-            }
-            row.Cells[_colReading.Index].Value = ch.IsError ? "-" : ch.Reading.ToString("0.000");
-            row.Cells[_colCorrected.Index].Value = "-";   // 보정값은 7개 모듈을 함께 읽는 ReadAll 에서만 나온다
-            row.Cells[_colState.Index].Value = ch.IsError ? ("오류: " + ch.ErrorMessage) : (_probeReading ? "정상" : "개별 읽기");
-            row.Cells[_colState.Index].Style.ForeColor = ch.IsError ? Color.Red : Color.Black;
-            if (ch.IsError)
-            {
-                AppendLog(L($"[Probe] {ch.Label} 읽기 실패: {ch.ErrorMessage}", $"[Probe] {ch.Label} read failed: {ch.ErrorMessage}"));
             }
         }
 
@@ -1167,10 +1152,24 @@ namespace ValidationStage
             foreach (var ch in channels)
             {
                 DataGridViewRow row = SyncProbeRow(ch);
-                row.Cells[_colReading.Index].Value = ch.IsError ? "-" : ch.Reading.ToString("0.000");
-                row.Cells[_colCorrected.Index].Value = ch.CorrectedReading?.ToString("0.000") ?? "-";
-                row.Cells[_colState.Index].Value = ch.IsError ? ("오류: " + ch.ErrorMessage) : "정상";
-                row.Cells[_colState.Index].Style.ForeColor = ch.IsError ? Color.Red : Color.Black;
+                // 보정값은 7개 프로브(라벨 X, Y, TZ1, TZ2, TX, TY1, TY2)가 모두 정상이어야 나온다.
+                row.Cells[_colReading.Index].Value = ch.CorrectedReading?.ToString("0.000") ?? "-";
+                DataGridViewCell state = row.Cells[_colState.Index];
+                if (ch.IsError)
+                {
+                    state.Value = "오류: " + ch.ErrorMessage;
+                    state.Style.ForeColor = Color.Red;
+                }
+                else if (ch.CorrectedReading == null)
+                {
+                    state.Value = "보정 불가 (7개 프로브 필요)";
+                    state.Style.ForeColor = Color.DarkOrange;
+                }
+                else
+                {
+                    state.Value = "정상";
+                    state.Style.ForeColor = Color.Black;
+                }
             }
 
             // 통신 오류면 반복 읽기를 멈춘다 (DLL 은 읽기 상태를 기억하지 않으므로 반복을 멈추는 것은 호출하는 쪽의 몫).
@@ -1209,7 +1208,6 @@ namespace ValidationStage
                 if (row.Cells[_colReading.Index].Value == null)
                 {
                     row.Cells[_colReading.Index].Value = "-";
-                    row.Cells[_colCorrected.Index].Value = "-";
                     row.Cells[_colState.Index].Value = "읽기 중지";
                     row.Cells[_colState.Index].Style.ForeColor = Color.Gray;
                 }

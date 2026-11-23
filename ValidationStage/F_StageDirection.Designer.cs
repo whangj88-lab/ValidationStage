@@ -49,7 +49,7 @@ namespace ValidationStage
             this._currentHeader.Name = "_currentHeader";
             this._currentHeader.Size = new System.Drawing.Size(190, 20);
             this._currentHeader.TabIndex = 1;
-            this._currentHeader.Text = "현재 설정";
+            this._currentHeader.Text = "현재 값 (컨트롤러)";
             //
             // _newHeader
             //
@@ -57,7 +57,7 @@ namespace ValidationStage
             this._newHeader.Name = "_newHeader";
             this._newHeader.Size = new System.Drawing.Size(130, 20);
             this._newHeader.TabIndex = 2;
-            this._newHeader.Text = "변경할 값";
+            this._newHeader.Text = "설정 파일 값";
             //
             // _xLabel
             //
@@ -151,13 +151,13 @@ namespace ValidationStage
             this._noteLabel.ForeColor = System.Drawing.Color.Firebrick;
             this._noteLabel.Location = new System.Drawing.Point(16, 142);
             this._noteLabel.Name = "_noteLabel";
-            this._noteLabel.Size = new System.Drawing.Size(380, 36);
+            this._noteLabel.Size = new System.Drawing.Size(380, 52);
             this._noteLabel.TabIndex = 12;
-            this._noteLabel.Text = "컨트롤러에 저장되고 리밋 방향도 같이 바뀝니다. 적용하면 자동으로 다시 연결하며, 적용 후에는 기계 원점 찾기를 다시 하세요.";
+            this._noteLabel.Text = "현재 값이 설정 파일 값(StageHost.txt)과 다르면 [적용]으로 맞춥니다. 리밋 방향도 같이 바뀌고 자동으로 다시 연결하며, 적용 후에는 기계 원점 찾기를 다시 하세요.";
             //
             // _readButton
             //
-            this._readButton.Location = new System.Drawing.Point(16, 186);
+            this._readButton.Location = new System.Drawing.Point(16, 202);
             this._readButton.Name = "_readButton";
             this._readButton.Size = new System.Drawing.Size(80, 26);
             this._readButton.TabIndex = 13;
@@ -167,7 +167,7 @@ namespace ValidationStage
             //
             // _applyButton
             //
-            this._applyButton.Location = new System.Drawing.Point(230, 186);
+            this._applyButton.Location = new System.Drawing.Point(230, 202);
             this._applyButton.Name = "_applyButton";
             this._applyButton.Size = new System.Drawing.Size(80, 26);
             this._applyButton.TabIndex = 14;
@@ -178,7 +178,7 @@ namespace ValidationStage
             // _closeButton
             //
             this._closeButton.DialogResult = System.Windows.Forms.DialogResult.Cancel;
-            this._closeButton.Location = new System.Drawing.Point(316, 186);
+            this._closeButton.Location = new System.Drawing.Point(316, 202);
             this._closeButton.Name = "_closeButton";
             this._closeButton.Size = new System.Drawing.Size(80, 26);
             this._closeButton.TabIndex = 15;
@@ -190,7 +190,7 @@ namespace ValidationStage
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.CancelButton = this._closeButton;
-            this.ClientSize = new System.Drawing.Size(412, 226);
+            this.ClientSize = new System.Drawing.Size(412, 242);
             this.Controls.Add(this._axisHeader);
             this.Controls.Add(this._currentHeader);
             this.Controls.Add(this._newHeader);

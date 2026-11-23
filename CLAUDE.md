@@ -34,8 +34,8 @@ Scope decisions made in conversation (not to be silently re-litigated in a futur
   `LastError` (`DeviceError`: PI GCS code, e.g. 5 = unreferenced, + message); messages Korean/English via
   `Messages.Language` (in-code string pairs `T(ko, en)`, no .resx/satellite DLLs); XML docs in Korean; no
   obfuscation; settings txt files still auto-saved (in `C:\ValidationStage\DoNotTouch` since 2026-11-20). "Low speed after connect" is the caller's job
-  (sample does it), not the DLL's. Probe: **the DLL keeps no read state** — `ReadAll`/`Read` return
-  `ProbeReadResult` (`Ok/NotConnected/Busy/CommError/ModuleNotFound`) and stopping the read loop on `CommError` is the
+  (sample does it), not the DLL's. Probe: **the DLL keeps no read state** — `ReadAll` returns
+  `ProbeReadResult` (`Ok/NotConnected/Busy/CommError`) and stopping the read loop on `CommError` is the
   caller's job (user chose this over a DLL-internal read loop; the sample shows it).
 
 ## Build
@@ -166,8 +166,18 @@ the old stage comes back — it would need porting to the DLL's style).
   The user asked for all three axes in the UI for now and will prune it later.
 - **Direction combos locked (2026-11-20, user: collision risk):** the REV combos in `F_StageDirection` and the main
   screen's "찾는 방향" X/Y/Z combos are `Enabled = false` in the designer files (display only). Home direction is
-  changed by editing `HomeDirX/Y/Z=` in `C:\ValidationStage\DoNotTouch\StageHost.txt` (read at startup); REV is in
-  controller flash, so changing it needs the combo re-enabled in the designer (or MMT's own tool).
+  changed by editing `HomeDirX/Y/Z=` in `C:\ValidationStage\DoNotTouch\StageHost.txt` (read at startup); REV is
+  set through the same file, see next item.
+- **Motor direction from the settings file (2026-11-23, user: a new station's controller comes with REV1, but this
+  station is X=REV0, Y=Z=REV1):** optional `MotorDirX/Y/Z=Ccw|Cw` lines in `StageHost.txt` (hand-edited only, no setter in
+  the API; axes without a line aren't checked; an invalid value is ignored with a log warning, and the line is dropped at
+  the next save). `ValidationSystem.GetStageMotorDirection` (setting or null), `GetStageMotorDirectionMismatches()` (live REV read;
+  empty = ok, null = not connected/unreadable). Never written automatically: `F_StageDirection` (takes `ValidationSystem`
+  now) shows the file value in the disabled combos and [적용] writes REV+HLS. On mismatch (or unreadable REV)
+  `HomeStageAsync`/`HomeStageAxisAsync`/`HomeAndZeroProbesAsync` refuse before anything moves; jog/move stay allowed, and
+  direct `Stage.HomeAsync` isn't checked. Only REV blocks; an HLS mismatch is still just a warning. New-station procedure:
+  copy `StageHost.txt` (incl. `MeasureOrigin` — similar enough, user), connect, [적용], check jog/limits at low speed, home.
+  Verified against a fake TCP controller only, not on hardware. Older builds drop the `MotorDir` lines when they save.
 - **REV follow-up (2026-10-28, user-reported on hardware):** (1) a REV write only takes effect after disconnect +
   reconnect; (2) REV does **not** swap the limit sensors (the axis drives past the limit). Fix: `SetMotorDirections(axes,
   dirs)` (single-axis `SetMotorDirection` wraps it) writes REV **and `HLS`** (manual 9.1.9: 0 = LR limits as wired,
@@ -395,10 +405,11 @@ in software rather than wired 1:1 to COM ports. `Probe` therefore:
 - **Probe values are in µm** (user request 2026-09-30): `ReadMicrometers` converts `ReadingInUnits` using the
   module's `UnitsOfMeasure` (DP reports "mm" → ×1000); unknown units throw so the row shows an error instead of a
   silently wrong number. Zero offsets are stored in µm too. Grid shows `0.000` µm, header "측정값 (µm)".
-- **Per-row [읽기] button** (`_colRead`, next to [영점], added 2026-10-01): one-shot read of that module only —
-  `Probe.Read(moduleId)` (waits ≤1 s for `_busLock`, same error shape as `ReadAll`) run via `Task.Run` from
-  `F_Main.ReadSingleProbeAsync`; `_singleReadsInFlight` blocks double-clicks on the same module. Works while
-  continuous reading is stopped (state shows "개별 읽기"); an error is shown/logged but does **not** stop continuous reading.
+- **Corrected value only (2026-11-23, user request):** `ProbeChannel.Reading`/`RawReading` were removed from the API
+  (internal `ZeroedReading` remains as correction input); the only value is `CorrectedReading`. Single-module read
+  (`Probe.Read`, `ModuleNotFound`, per-row [읽기] button, added 2026-10-01) was **removed** too — correction needs all 7.
+  Grid: one "측정값 (µm)" column = `CorrectedReading`; when null without an error → "-" + state "보정 불가 (7개 프로브 필요)".
+  Deriving tilt coefficients needs uncorrected data, which this DLL no longer gives (A's program does that).
 - **Resolution → 18 bit on connect (2026-11-19, user request):** `ConnectAsync` → `SetResolution18Bit()`: every
   `OrbitModuleDP` with `isResolutionAvailable(res18Bit)` and `Resolution != res18Bit` is set to 18 bit (logged per
   module; a failure only logs, connect still succeeds). **Also applied after `ScanAsync` (Ping) and a successful
@@ -410,14 +421,13 @@ in software rather than wired 1:1 to COM ports. `Probe` therefore:
 - **Tilt correction (2026-11-20, user request):** A's `GageCounter.ReadPortAllCore` correction (A's
   `18.CSH030EX_4Line_Calibration/Code/Source/MySingleton.cs`; latest version: XtoY/YtoX use the *original* X/Y, plus the
   glass-thickness `ldComp`) ported 1:1 into internal `ProbeTiltCorrection` (verified identical to A's code on 1000 random
-  inputs, with A's signs). Input = `Reading` (zeroed) of labels `X, Y, TZ1, TZ2, TX, TY1, TY2`, **no sign flip** — all +
+  inputs, with A's signs). Input = `ZeroedReading` of labels `X, Y, TZ1, TZ2, TX, TY1, TY2`, **no sign flip** — all +
   (user decision 2026-11-20: callers flip it themselves if needed; A multiplies X +1, rest −1) → `ProbeChannel.CorrectedReading` (double?, only in `ReadAll` when all 7 exist once and read OK; null
-  otherwise, incl. single `Read`). Coefficients **not exposed in the API** (user): `C:\ValidationStage\DoNotTouch\ProbeTiltCorrection.xml`
+  otherwise). Coefficients **not exposed in the API** (user): `C:\ValidationStage\DoNotTouch\ProbeTiltCorrection.xml`
   in A's XmlSerializer format (parsed with XElement since the class is internal; A's files load and vice versa), created
   with all 0 (= no correction, user choice) if missing; NaN/Inf or unreadable → 0 + log. Loaded once in the `Probe`
   constructor (restart to reload). The 45000/83000/60000/120000/−670 constants are A's geometry — B's probe layout is
-  the same (user, 2026-11-20). Grid: "보정값 (µm)"
-  column after "측정값 (µm)" (= zeroed, before correction — the user's definition of 원본).
+  the same (user, 2026-11-20).
 - Zero/tare is a **software offset** (`Zero`/`ZeroAll`, stored per module ID), not a hardware preset. `OrbitModule`
   does expose `PresetInUnits` for a hardware zero if that's ever needed instead.
 

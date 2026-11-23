@@ -131,9 +131,7 @@
             this._colModuleId = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this._colLabel = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this._colReading = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this._colCorrected = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this._colState = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this._colRead = new System.Windows.Forms.DataGridViewButtonColumn();
             this._colZero = new System.Windows.Forms.DataGridViewButtonColumn();
             this._probeBtnRow = new System.Windows.Forms.FlowLayoutPanel();
             this._probeConnectButton = new System.Windows.Forms.Button();
@@ -1389,9 +1387,7 @@
             this._colModuleId,
             this._colLabel,
             this._colReading,
-            this._colCorrected,
             this._colState,
-            this._colRead,
             this._colZero});
             this._probeGrid.Dock = System.Windows.Forms.DockStyle.Fill;
             this._probeGrid.Location = new System.Drawing.Point(3, 55);
@@ -1420,24 +1416,11 @@
             this._colReading.Name = "_colReading";
             this._colReading.ReadOnly = true;
             // 
-            // _colCorrected
-            // 
-            this._colCorrected.HeaderText = "보정값 (µm)";
-            this._colCorrected.Name = "_colCorrected";
-            this._colCorrected.ReadOnly = true;
-            // 
             // _colState
             // 
             this._colState.HeaderText = "상태";
             this._colState.Name = "_colState";
             this._colState.ReadOnly = true;
-            // 
-            // _colRead
-            // 
-            this._colRead.HeaderText = "";
-            this._colRead.Name = "_colRead";
-            this._colRead.Text = "읽기";
-            this._colRead.UseColumnTextForButtonValue = true;
             // 
             // _colZero
             // 
@@ -1674,9 +1657,7 @@
         private System.Windows.Forms.DataGridViewTextBoxColumn _colModuleId;
         private System.Windows.Forms.DataGridViewTextBoxColumn _colLabel;
         private System.Windows.Forms.DataGridViewTextBoxColumn _colReading;
-        private System.Windows.Forms.DataGridViewTextBoxColumn _colCorrected;
         private System.Windows.Forms.DataGridViewTextBoxColumn _colState;
-        private System.Windows.Forms.DataGridViewButtonColumn _colRead;
         private System.Windows.Forms.DataGridViewButtonColumn _colZero;
         private System.Windows.Forms.TextBox _logBox;
         private System.Windows.Forms.Timer _probeTimer;

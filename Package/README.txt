@@ -103,10 +103,15 @@ system.DisconnectAll();
   리밋 방향(HLS)도 같이 바뀌고, 컨트롤러에 반영되도록 스테이지 연결을 자동으로 끊었다가 다시 연결합니다 (X, Y, Z 모두 정지 상태에서 호출).
   바꾸면 조그/이동/원점 찾기 방향과 위치 방향이 모두 반대가 되므로 기계 원점 찾기를 다시 하고, 저속으로 양쪽 리밋 동작을 먼저 확인하십시오.
   리밋 방향이 모터 방향과 맞는지는 Stage.IsLimitDirectionMatched(axis) 로 확인합니다.
+- 설비의 모터 방향은 StageHost.txt 에 MotorDirX=Ccw (REV0) 또는 Cw (REV1) 형식으로 적어 둡니다 (Y, Z 도 같음, 적은 축만 검사).
+  system.GetStageMotorDirection(axis) 로 설정값을, system.GetStageMotorDirectionMismatches() 로 컨트롤러 값과 다른 축을 읽습니다.
+  다른 축이 있으면 system.HomeStageAsync / HomeStageAxisAsync / HomeAndZeroProbesAsync 는 움직이지 않고 false 를 돌려줍니다
+  (조그/이동과 Stage.HomeAsync 직접 호출은 막지 않음). 컨트롤러에 자동으로 쓰지는 않으므로 Stage.SetMotorDirections 로 적용하십시오
+  (예제는 [모터 방향] 창의 [적용]). 새 설비/새 컨트롤러는 기존 설비의 StageHost.txt 를 복사한 뒤 한 번 적용하면 됩니다.
 - 전체 시스템 초기화 (측정 전 프로브 영점): system.HomeAndZeroProbesAsync(x, y, z 찾는 방향)
   = 헥사포드 TX, TY, TZ -> 0 (활성 좌표계) -> 스테이지 기계 원점 찾기 -> 저장된 측정 원점으로 이동 -> 그 위치를 스테이지 0 으로
   -> 프로브 전체 영점. 끝나면 스테이지 0 / 헥사포드 0 위치에서 프로브가 0 입니다.
-  시작 전에 세 장비 연결과 헥사포드 레퍼런스를 확인하고, 아니면 아무것도 움직이지 않습니다.
+  시작 전에 세 장비 연결, 스테이지 모터 방향, 헥사포드 레퍼런스를 확인하고, 아니면 아무것도 움직이지 않습니다.
   측정 원점(스테이지 X, Y, Z 만 - 헥사포드는 항상 TX, TY, TZ = 0)은 처음 한 번 정합니다:
   기계 원점 찾기(HomeStageAsync) -> 조그로 측정 위치에 맞춤 -> system.SaveStageMeasureOriginFromCurrent()
   (기계 원점 기준 좌표를 StageHost.txt 에 저장).
@@ -116,8 +121,9 @@ system.DisconnectAll();
   (false 반환, system.SystemInitAborted = true). 실행 중에는 다른 이동 명령을 보내지 마십시오 (샘플은 비상 정지 외 화면을 막음).
 - 이동/원점 찾기(MoveAsync, MoveAbsAsync, HomeStageAsync 등)는 기다리는 사이 그 축에 정지/비상 정지 명령이 들어오면
   멈춘 뒤 false 를 돌려줍니다 (LastError = "정지 명령으로 중단"). 원점 찾기가 중단되면 그 축은 다시 원점 찾기를 해야 합니다.
-- 프로브 기울기 보정: 라벨이 X, Y, TZ1, TZ2, TX, TY1, TY2 인 모듈 7개가 있으면 ReadAll 결과의 ProbeChannel.CorrectedReading
-  (µm) 에 보정값이 들어갑니다 (Reading = 영점 적용 값, 보정 전). 7개 중 하나라도 없거나 오류면 null 입니다.
+- 프로브 측정값은 ReadAll 결과의 ProbeChannel.CorrectedReading (µm, 영점 + 기울기 보정 적용) 입니다.
+  라벨이 X, Y, TZ1, TZ2, TX, TY1, TY2 인 모듈 7개가 모두 있어야 하며, 하나라도 없거나 중복/오류면 모두 null 입니다.
+  보정 전 값과 모듈 하나만 읽는 기능은 제공하지 않습니다.
   부호는 뒤집지 않습니다 (모두 +). 반대 방향이 필요하면 가져가서 부호를 바꿔 쓰십시오.
   보정 계수는 C:\ValidationStage\DoNotTouch\ProbeTiltCorrection.xml 에서 읽습니다 (없으면 모두 0 = 보정 없음으로 만들어짐).
 - 오류/로그 메시지 언어: Messages.Language = Language.Korean / Language.English
@@ -130,6 +136,6 @@ Sample\ValidationStage.sln 을 Visual Studio 2019 이상에서 열고 x64 로 �
 F_Main.cs 가 위 사용법을 모두 보여 줍니다 (연결, 저속 설정, 조그/이동/정지, 원점, 상태 표시, 프로브 읽기).
 예제가 쓰는 설정 파일(StageHost.txt, HexapodHost.txt, ProbeLabels.txt, VisionHost.txt)은 C:\ValidationStage\DoNotTouch
 (ValidationSystem.SettingsDirectory) 에 자동으로 만들어집니다.
-(StageHost.txt 에는 스테이지 주소, 축별 원점 찾는 방향, 측정 원점이 "Host=..." / "HomeDirX=Negative" /
- "MeasureOrigin=x,y,z" 형식으로,
+(StageHost.txt 에는 스테이지 주소, 축별 원점 찾는 방향, 모터 방향, 측정 원점이 "Host=..." / "HomeDirX=Negative" /
+ "MotorDirX=Ccw" (직접 적은 경우만) / "MeasureOrigin=x,y,z" 형식으로,
  HexapodHost.txt 에는 헥사포드 주소와 소프트웨어 리밋이 "Host=..." / "SoftLimit.TILTEDCS.TX=-300,300" 형식으로 들어갑니다)
