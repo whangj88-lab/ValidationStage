@@ -10,7 +10,7 @@ Validation Stage 장비(Motorized Stage + Hexapod + Solartron 프로브)를 제�
 
 1. 폴더 구성
 ------------
-Bin\                         업체 프로그램에 넣을 파일 (5개 모두 필요)
+Bin\                         프로그램에 넣을 파일 (5개 모두 필요)
   ValidationStage.Devices.dll    장비 제어 DLL
   ValidationStage.Devices.xml    API 설명 (DLL 과 같은 폴더에 두면 Visual Studio 툴팁/IntelliSense 에 표시됨)
   PI_GCS2_DLL_x64.dll            PI Hexapod 드라이버 (64비트 네이티브 DLL)
@@ -86,39 +86,36 @@ system.DisconnectAll();
   ReadAll 이 Busy 를 돌려주면 다른 작업이 버스를 쓰는 중이므로 그 주기만 건너뜁니다.
 - Hexapod 컨트롤러 전원을 켠 뒤에는 레퍼런스(Hexapod.ReferenceAsync)를 먼저 해야 움직입니다.
   (안 하면 LastError.Code = 5 "unreferenced")
-- Hexapod 연결(ConnectHexapod) 직후 좌표계 CSHCS(ZERO 하위, U=180) 와 TILTEDCS(CSHCS 하위, 값 0) 가 없으면 만들고
-  TILTEDCS 를 활성화합니다. 이미 있는 좌표계는 그대로 둡니다. 플랫폼은 움직이지 않습니다.
+- Hexapod 를 연결(ConnectHexapod)하면 TILTEDCS 좌표계가 자동으로 활성화됩니다 (플랫폼은 움직이지 않음).
 - Hexapod TX, TY, TZ 에는 DLL 소프트웨어 리밋이 있습니다 (단위 arcmin, 좌표계별, 저장한 적 없는 좌표계는 사용 + ±300 arcmin).
   이동(MoveAsync/MoveAbsAsync)은 목표가 활성 좌표계의 리밋을 벗어나면 명령 전체를 보내지 않고 false 를 돌려주며,
   조그(JogRun)는 리밋에서 멈춥니다. 읽기 Hexapod.GetSoftLimit("TILTEDCS"), 설정+저장(HexapodHost.txt)
   system.SetHexapodSoftLimit("TILTEDCS", new HexapodSoftLimit { Min = new[] { -100.0, -100, -100 }, Max = new[] { 100.0, 100, 100 } }).
-  DLL 을 거치지 않는 이동(PIMikroMove 등)과 레퍼런스(FRF)는 검사하지 않습니다.
+  레퍼런스(ReferenceAsync)와 이 DLL 을 거치지 않는 이동(다른 프로그램)은 검사하지 않습니다.
 - Hexapod 회전 중심(피벗)은 Hexapod.SetPivot(x, y, z) 로 설정하고 Hexapod.GetPivot() 으로 읽습니다 (mm, TILTEDCS 축 기준, 플랫폼은 움직이지 않음).
   레퍼런스 완료, 정지, TX = TY = TZ = 0, TILTEDCS 활성일 때만 되며 아니면 false 입니다. 다시 바꿀 때까지 컨트롤러에 남습니다.
   바꾼 뒤에는 전체 시스템 초기화를 다시 하십시오.
-- Motorized Stage 는 컨트롤러 전원을 켜면 위치가 0 부터 시작합니다. 필요하면 HomeStageAsync(기계 원점 찾기)를 먼저 하십시오.
-  찾는 방향은 축별로 지정합니다 (기본 (-)리밋 방향). 예: HomeStageAsync(HomeDirection.Negative, HomeDirection.Negative, HomeDirection.Positive)
-  한 축만 찾을 때는 HomeStageAxisAsync(Axis.Z, HomeDirection.Positive)
-  찾는 방향은 SetStageHomeDirection(axis, direction) 으로 StageHost.txt 에 저장해 두고 GetStageHomeDirection(axis) 로
-  다시 읽을 수 있습니다 (저장만 하며 원점 찾기에 자동으로 쓰이지는 않음 - 읽은 값을 HomeStageAsync 에 넘기십시오).
-- 스테이지 축의 모터 회전 방향은 Stage.GetMotorDirection(axis) / Stage.SetMotorDirections(axes, directions) 로
-  읽고 바꿉니다 (컨트롤러에 저장됨, 한 축만 바꿀 때는 SetMotorDirection(axis, MotorDirection.Ccw 또는 Cw)).
-  리밋 방향(HLS)도 같이 바뀌고, 컨트롤러에 반영되도록 스테이지 연결을 자동으로 끊었다가 다시 연결합니다 (X, Y, Z 모두 정지 상태에서 호출).
-  바꾸면 조그/이동/원점 찾기 방향과 위치 방향이 모두 반대가 되므로 기계 원점 찾기를 다시 하고, 저속으로 양쪽 리밋 동작을 먼저 확인하십시오.
-  리밋 방향이 모터 방향과 맞는지는 Stage.IsLimitDirectionMatched(axis) 로 확인합니다.
-- 설비의 모터 방향은 StageHost.txt 에 MotorDirX=Ccw (REV0) 또는 Cw (REV1) 형식으로 적어 둡니다 (Y, Z 도 같음, 적은 축만 검사).
-  system.GetStageMotorDirection(axis) 로 설정값을, system.GetStageMotorDirectionMismatches() 로 컨트롤러 값과 다른 축을 읽습니다.
-  다른 축이 있으면 system.HomeStageAsync / HomeStageAxisAsync / HomeAndZeroProbesAsync 는 움직이지 않고 false 를 돌려줍니다
-  (조그/이동과 Stage.HomeAsync 직접 호출은 막지 않음). 컨트롤러에 자동으로 쓰지는 않으므로 Stage.SetMotorDirections 로 적용하십시오
-  (예제는 [모터 방향] 창의 [적용]). 새 설비/새 컨트롤러는 기존 설비의 StageHost.txt 를 복사한 뒤 한 번 적용하면 됩니다.
-- 전체 시스템 초기화 (측정 전 프로브 영점): system.HomeAndZeroProbesAsync(x, y, z 찾는 방향)
+- Motorized Stage 는 컨트롤러 전원을 켜면 위치가 0 부터 시작하므로 기계 원점 찾기를 먼저 하십시오.
+  찾는 방향은 반드시 GetStageHomeDirection(axis) 으로 읽은 값을 넘기십시오.
+  (생략하면 모두 (-) 방향으로 움직입니다. 방향이 다르면 프로브나 하드웨어가 손상될 수 있습니다)
+    HomeDirection x = system.GetStageHomeDirection(Axis.X);
+    HomeDirection y = system.GetStageHomeDirection(Axis.Y);
+    HomeDirection z = system.GetStageHomeDirection(Axis.Z);
+    await system.HomeStageAsync(x, y, z);              // X, Y, Z 모두
+    await system.HomeStageAxisAsync(Axis.Z, z);        // 한 축만
+- 스테이지 모터 방향이 설정과 다르면 HomeStageAsync / HomeStageAxisAsync / HomeAndZeroProbesAsync 는 움직이지 않고
+  false 를 돌려줍니다 (조그/이동은 막지 않으므로 이 상태에서는 호출하지 마십시오).
+  다른 축은 system.GetStageMotorDirectionMismatches() 로 확인합니다 (예제의 [모터 방향] 창 참고).
+- 모터 방향, 원점 찾는 방향, C:\ValidationStage\DoNotTouch 폴더의 파일은 임의로 바꾸거나 지우지 마십시오.
+  축이 반대 방향으로 움직이거나 리밋을 지나쳐 프로브나 하드웨어가 손상될 수 있습니다
+  (StageHost.txt 가 없으면 찾는 방향은 모두 (-) 로 읽히고, 모터 방향은 검사하지 않습니다).
+- 전체 시스템 초기화 (측정 전 프로브 영점): system.HomeAndZeroProbesAsync(x, y, z) - 찾는 방향은 위와 같이 읽은 값
   = 헥사포드 TX, TY, TZ -> 0 (활성 좌표계) -> 스테이지 기계 원점 찾기 -> 저장된 측정 원점으로 이동 -> 그 위치를 스테이지 0 으로
   -> 프로브 전체 영점. 끝나면 스테이지 0 / 헥사포드 0 위치에서 프로브가 0 입니다.
   시작 전에 세 장비 연결, 스테이지 모터 방향, 헥사포드 레퍼런스를 확인하고, 아니면 아무것도 움직이지 않습니다.
   측정 원점(스테이지 X, Y, Z 만 - 헥사포드는 항상 TX, TY, TZ = 0)은 처음 한 번 정합니다:
   기계 원점 찾기(HomeStageAsync) -> 조그로 측정 위치에 맞춤 -> system.SaveStageMeasureOriginFromCurrent()
   (기계 원점 기준 좌표를 StageHost.txt 에 저장).
-  스테이지 현재 위치를 임의로 0 으로 바꾸는 기능은 없습니다 (운용 중 원점이 바뀌는 실수 방지).
   실행 중 상태: system.IsSystemInitRunning, system.CurrentSystemInitStep (SystemInitStep 1~4 단계).
   실행 중 system.EmergencyStopAllAsync() 또는 StopAllAsync() 를 부르면 그 자리에서 중단하고 다음 단계로 넘어가지 않습니다
   (false 반환, system.SystemInitAborted = true). 실행 중에는 다른 이동 명령을 보내지 마십시오 (샘플은 비상 정지 외 화면을 막음).
@@ -127,10 +124,7 @@ system.DisconnectAll();
 - 프로브 측정값은 ReadAll 결과의 ProbeChannel.CorrectedReading (µm, 영점 + 기울기 보정 적용) 입니다.
   라벨이 X, Y, TZ1, TZ2, TX, TY1, TY2 인 모듈 7개가 모두 있어야 하며, 하나라도 없거나 중복/오류면 모두 null 입니다.
   보정 전 값과 모듈 하나만 읽는 기능은 제공하지 않습니다.
-  측정값의 부호는 뒤집지 않습니다 (모두 +). 반대 방향이 필요하면 가져가서 부호를 바꿔 쓰십시오.
-  (보정 계수는 X 는 +, 나머지 프로브는 - 부호 기준의 값이며 DLL 안에서 맞춰 계산합니다)
-  보정 계수는 C:\ValidationStage\DoNotTouch\ProbeTiltCorrection.xml 에서 읽습니다 (없으면 모두 0 = 보정 없음으로 만들어짐).
-- 오류/로그 메시지 언어: Messages.Language = Language.Korean / Language.English
+  측정값의 부호는 뒤집지 않습니다 (모두 +). 반대 방향이 필요하면 부호를 반전 시켜 사용하시면 됩니다.
 
 
 6. 예제 프로그램
@@ -139,7 +133,4 @@ Sample\ValidationStage.sln 을 Visual Studio 2019 이상에서 열고 x64 로 �
 (Visual Studio 설치 시 ".NET 데스크톱 개발" 워크로드와 .NET Framework 4.8 대상 팩이 필요합니다)
 F_Main.cs 가 위 사용법을 모두 보여 줍니다 (연결, 저속 설정, 조그/이동/정지, 원점, 상태 표시, 프로브 읽기).
 예제가 쓰는 설정 파일(StageHost.txt, HexapodHost.txt, ProbeLabels.txt, VisionHost.txt)은 C:\ValidationStage\DoNotTouch
-(ValidationSystem.SettingsDirectory) 에 자동으로 만들어집니다.
-(StageHost.txt 에는 스테이지 주소, 축별 원점 찾는 방향, 모터 방향, 측정 원점이 "Host=..." / "HomeDirX=Negative" /
- "MotorDirX=Ccw" (직접 적은 경우만) / "MeasureOrigin=x,y,z" 형식으로,
- HexapodHost.txt 에는 헥사포드 주소와 소프트웨어 리밋이 "Host=..." / "SoftLimit.TILTEDCS.TX=-300,300" 형식으로 들어갑니다)
+(ValidationSystem.SettingsDirectory) 에 자동으로 만들어집니다. 이 폴더의 파일은 임의로 수정하지 마십시오.
