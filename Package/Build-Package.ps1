@@ -19,6 +19,9 @@ $binFiles = @(
 # 샘플 소스에서 빼는 것: 빌드 결과물, VS 사용자 설정, 프로젝트에 포함되지 않은 옛 코드(Motion\SK_Motion.cs)
 $sampleExcludeDirs = @('bin', 'obj', 'Motion')
 $sampleExcludeExtensions = @('.user')
+# 샘플에서 빼는 사내 전용 기능: 프로브 기울기 보정 측정 (이름에 ProbeTilt 가 들어간 파일 + csproj 의 해당 항목)
+$sampleInternalFiles = '*ProbeTilt*'
+$sampleInternalPattern = 'ProbeTilt|기울기 보정 측정|Keys\.F12'   # 남아 있으면 배포본을 만들지 않는다
 
 function Find-MSBuild {
     $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
@@ -82,6 +85,7 @@ Get-ChildItem $sampleSource -Recurse -File | ForEach-Object {
     $topDir = $relative.Split('\')[0]
     if ($relative.Contains('\') -and $sampleExcludeDirs -contains $topDir) { return }
     if ($sampleExcludeExtensions -contains $_.Extension) { return }
+    if ($_.Name -like $sampleInternalFiles) { return }
     $target = Join-Path $sampleProjectDir $relative
     New-Item -ItemType Directory -Force (Split-Path $target -Parent) | Out-Null
     Copy-Item $_.FullName $target
@@ -91,6 +95,7 @@ Get-ChildItem $sampleSource -Recurse -File | ForEach-Object {
 $csprojPath = Join-Path $sampleProjectDir 'ValidationStage.csproj'
 $csproj = [IO.File]::ReadAllText($csprojPath)
 $csproj = [regex]::Replace($csproj, "(?s)\r?\n\s*<PropertyGroup Condition=""'\`$\(Configuration\)\|\`$\(Platform\)' == 'Remote\|x64'"">.*?</PropertyGroup>", '')
+$csproj = [regex]::Replace($csproj, '(?s)\r?\n[ \t]*<(Compile|EmbeddedResource) Include="[^"]*ProbeTilt[^"]*"(\s*/>|>.*?</\1>)', '')
 Write-Utf8Bom $csprojPath $csproj
 
 # 샘플 프로젝트만 들어 있는 솔루션 (프로젝트 GUID 는 사내 솔루션과 같다)
@@ -119,6 +124,12 @@ Global
 EndGlobal
 '@
 Write-Utf8Bom (Join-Path $sampleDir 'ValidationStage.sln') ($sln -replace "`r?`n", "`r`n")
+
+# 사내 전용 코드가 남아 있지 않은지 확인
+$leftovers = Get-ChildItem $sampleDir -Recurse -File | Select-String -Pattern $sampleInternalPattern -Encoding UTF8
+if ($leftovers) {
+    throw "샘플에 사내 전용 코드(프로브 기울기 보정 측정)가 남아 있습니다:`n" + (($leftovers | ForEach-Object { "$($_.Filename):$($_.LineNumber) $($_.Line.Trim())" }) -join "`n")
+}
 
 # 4. README
 $readme = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'README.txt')).Replace('{VERSION}', $version)

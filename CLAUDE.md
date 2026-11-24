@@ -71,6 +71,9 @@ OK (user confirmed 2026-10-08). No `.pdb` in the package (user decision).
   `..\PIDll\`; otherwise → file reference `..\..\Bin\ValidationStage.Devices.dll` + PI DLL from `Bin\` (Orbit DLLs come
   along as dependencies). Paths use `$(MSBuildProjectDirectory)`, not `$(SolutionDir)`.
 - The script drops `bin/obj/Motion/*.user` and the `Remote|x64` config (internal share path) from the packaged sample.
+- **Tilt measurement is not in the vendor sample (2026-11-24, user decision):** all its UI code is in `F_Main.ProbeTilt.cs` (button created in code, hooks via
+  `OnLoad`/`OnFormClosing`/`ProcessCmdKey` overrides and event subscriptions) + `F_ProbeTiltResult*`. The script skips `*ProbeTilt*` files and their csproj
+  entries and throws if `ProbeTilt`/`기울기 보정 측정`/`Keys.F12` is left in the sample - so never mention it in other sample files. The DLL still has the API.
 - When the API changes, update `Package\README.txt` (quick-start code, usage rules) too.
 
 ### Orbit SDK DLLs live in the repo (`OrbitDll/`)
@@ -457,7 +460,7 @@ in software rather than wired 1:1 to COM ports. `Probe` therefore:
   stopped). Verdict from the verify scan's residual slope: ≤0.0001 Good, ≤0.0002 Caution, else Bad (from A's data). Files:
   `DoNotTouch\ProbeTilt\ProbeTiltCorrection_yyMMdd_HHmmss.xml` + `_Raw.csv` + `_Result.csv`; never applied automatically —
   `ApplyProbeTilt` backs up and replaces `ProbeTiltCorrection.xml`, live without restart. Sample: [기울기 보정 측정] (probe row, **hidden;
-  Ctrl+Shift+F12 toggles it** - `F_Main.ProcessCmdKey`, user 2026-11-23: developer only) →
+  Ctrl+Shift+F12 toggles it** - `F_Main.ProbeTilt.cs`, internal build only, user 2026-11-23: developer only) →
   confirm, reuses the init banner/UI lock → `F_ProbeTiltResult` (own designer file) with [적용]. A scan can't separate stage
   straightness from glass tilt, and doesn't check the TZ-rotation terms. Checked by simulation, A's data and on hardware (below).
   **First hardware run (2026-11-23, not applied)** alternated X/Y scans: XtoY came out −0.0020 (warm-up before Y ever moved: −0.0008),
